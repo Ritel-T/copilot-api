@@ -10,5 +10,10 @@ export default defineConfig({
   },
   build: {
     outDir: "dist",
+    rollupOptions: {
+      output: {
+        entryFileNames: "assets/[name]-[hash]-v2.js",
+      },
+    },
   },
 })

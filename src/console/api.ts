@@ -3,45 +3,33 @@ import { cors } from "hono/cors"
 import { z } from "zod"
 
 import {
-  getAccounts,
-  getAccount,
   addAccount,
-  updateAccount,
   deleteAccount,
+  getAccount,
+  getAccounts,
+  regenerateApiKey,
+  updateAccount,
 } from "./account-store"
-import { startDeviceFlow, getSession, cleanupSession } from "./auth-flow"
+import { cleanupSession, getSession, startDeviceFlow } from "./auth-flow"
 import {
-  startInstance,
-  stopInstance,
-  getInstanceStatus,
   getInstanceError,
+  getInstanceStatus,
   getInstanceUsage,
   getInstanceUser,
+  startInstance,
+  stopInstance,
 } from "./instance-manager"
-import { checkPortConflict, findAvailablePort } from "./port-check"
 
-const AddAccountSchema = z.object({
-  name: z.string().min(1),
-  githubToken: z.string().min(1),
-  accountType: z.string().default("individual"),
-  port: z.number().int().min(1024).max(65535),
-  enabled: z.boolean().default(true),
-})
+let adminKey = ""
 
-const UpdateAccountSchema = z.object({
-  name: z.string().min(1).optional(),
-  githubToken: z.string().min(1).optional(),
-  accountType: z.string().optional(),
-  port: z.number().int().min(1024).max(65535).optional(),
-  enabled: z.boolean().optional(),
-})
+export function setAdminKey(key: string): void {
+  adminKey = key
+}
+let proxyPort = 4141
 
-const CompleteAuthSchema = z.object({
-  sessionId: z.string().min(1),
-  name: z.string().min(1),
-  accountType: z.string().default("individual"),
-  port: z.number().int().min(1024).max(65535),
-})
+export function setProxyPort(port: number): void {
+  proxyPort = port
+}
 
 function formatZodError(err: z.ZodError): string {
   return z.treeifyError(err).children ?
@@ -49,19 +37,26 @@ function formatZodError(err: z.ZodError): string {
     : err.message
 }
 
-function portConflictMessage(conflict: {
-  port: number
-  conflict: string
-  accountName?: string
-}): string {
-  return conflict.conflict === "account" ?
-      `Port ${conflict.port} is already used by account "${conflict.accountName}"`
-    : `Port ${conflict.port} is already in use by another process`
-}
-
 export const consoleApi = new Hono()
 
 consoleApi.use(cors())
+
+// Public config (no auth required)
+consoleApi.get("/config", (c) => c.json({ proxyPort }))
+
+// Admin auth middleware
+consoleApi.use("/*", async (c, next) => {
+  if (!adminKey) return next()
+  const auth = c.req.header("authorization")
+  const token = auth?.replace("Bearer ", "")
+  if (token !== adminKey) {
+    return c.json({ error: "Unauthorized" }, 401)
+  }
+  return next()
+})
+
+// Auth check endpoint (for frontend login)
+consoleApi.get("/auth/check", (c) => c.json({ ok: true }))
 
 // List all accounts with status
 consoleApi.get("/accounts", async (c) => {
@@ -93,6 +88,13 @@ consoleApi.get("/accounts/:id", async (c) => {
   return c.json({ ...account, status, error })
 })
 
+const AddAccountSchema = z.object({
+  name: z.string().min(1),
+  githubToken: z.string().min(1),
+  accountType: z.string().default("individual"),
+  enabled: z.boolean().default(true),
+})
+
 // Add account
 consoleApi.post("/accounts", async (c) => {
   const body: unknown = await c.req.json()
@@ -100,14 +102,15 @@ consoleApi.post("/accounts", async (c) => {
   if (!parsed.success) {
     return c.json({ error: formatZodError(parsed.error) }, 400)
   }
-
-  const conflict = await checkPortConflict(parsed.data.port)
-  if (conflict) {
-    return c.json({ error: portConflictMessage(conflict) }, 409)
-  }
-
   const account = await addAccount(parsed.data)
   return c.json(account, 201)
+})
+
+const UpdateAccountSchema = z.object({
+  name: z.string().min(1).optional(),
+  githubToken: z.string().min(1).optional(),
+  accountType: z.string().optional(),
+  enabled: z.boolean().optional(),
 })
 
 // Update account
@@ -117,16 +120,7 @@ consoleApi.put("/accounts/:id", async (c) => {
   if (!parsed.success) {
     return c.json({ error: formatZodError(parsed.error) }, 400)
   }
-
-  const id = c.req.param("id")
-  if (parsed.data.port !== undefined) {
-    const conflict = await checkPortConflict(parsed.data.port, id)
-    if (conflict) {
-      return c.json({ error: portConflictMessage(conflict) }, 409)
-    }
-  }
-
-  const account = await updateAccount(id, parsed.data)
+  const account = await updateAccount(c.req.param("id"), parsed.data)
   if (!account) return c.json({ error: "Account not found" }, 404)
   return c.json(account)
 })
@@ -134,10 +128,17 @@ consoleApi.put("/accounts/:id", async (c) => {
 // Delete account
 consoleApi.delete("/accounts/:id", async (c) => {
   const id = c.req.param("id")
-  await stopInstance(id)
+  stopInstance(id)
   const deleted = await deleteAccount(id)
   if (!deleted) return c.json({ error: "Account not found" }, 404)
   return c.json({ ok: true })
+})
+
+// Regenerate API key
+consoleApi.post("/accounts/:id/regenerate-key", async (c) => {
+  const account = await regenerateApiKey(c.req.param("id"))
+  if (!account) return c.json({ error: "Account not found" }, 404)
+  return c.json(account)
 })
 
 // Start instance
@@ -153,8 +154,8 @@ consoleApi.post("/accounts/:id/start", async (c) => {
 })
 
 // Stop instance
-consoleApi.post("/accounts/:id/stop", async (c) => {
-  await stopInstance(c.req.param("id"))
+consoleApi.post("/accounts/:id/stop", (c) => {
+  stopInstance(c.req.param("id"))
   return c.json({ status: "stopped" })
 })
 
@@ -188,6 +189,12 @@ consoleApi.get("/auth/poll/:sessionId", (c) => {
   })
 })
 
+const CompleteAuthSchema = z.object({
+  sessionId: z.string().min(1),
+  name: z.string().min(1),
+  accountType: z.string().default("individual"),
+})
+
 consoleApi.post("/auth/complete", async (c) => {
   const body: unknown = await c.req.json()
   const parsed = CompleteAuthSchema.safeParse(body)
@@ -201,57 +208,13 @@ consoleApi.post("/auth/complete", async (c) => {
     return c.json({ error: "Auth not completed yet" }, 400)
   }
 
-  const conflict = await checkPortConflict(parsed.data.port)
-  if (conflict) {
-    return c.json({ error: portConflictMessage(conflict) }, 409)
-  }
-
   const account = await addAccount({
     name: parsed.data.name,
     githubToken: session.accessToken,
     accountType: parsed.data.accountType,
-    port: parsed.data.port,
     enabled: true,
   })
 
   cleanupSession(parsed.data.sessionId)
   return c.json(account, 201)
-})
-
-// === Port Management ===
-
-consoleApi.get("/port/check/:port", async (c) => {
-  const port = Number.parseInt(c.req.param("port"), 10)
-  if (Number.isNaN(port) || port < 1024 || port > 65535) {
-    return c.json({ error: "Invalid port" }, 400)
-  }
-
-  const excludeId = c.req.query("exclude") ?? undefined
-  const conflict = await checkPortConflict(port, excludeId)
-
-  if (conflict) {
-    return c.json({
-      available: false,
-      conflict: conflict.conflict,
-      accountName: conflict.accountName,
-    })
-  }
-
-  return c.json({ available: true })
-})
-
-consoleApi.get("/port/suggest", async (c) => {
-  const startRaw = c.req.query("start") ?? "4141"
-  const start = Number.parseInt(startRaw, 10)
-  const excludeId = c.req.query("exclude") ?? undefined
-
-  try {
-    const port = await findAvailablePort(
-      Number.isNaN(start) ? 4141 : start,
-      excludeId,
-    )
-    return c.json({ port })
-  } catch {
-    return c.json({ error: "No available port found" }, 500)
-  }
 })

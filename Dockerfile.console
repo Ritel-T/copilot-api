@@ -28,12 +28,12 @@ COPY --from=builder /app/src ./src
 COPY --from=builder /app/tsconfig.json ./
 COPY --from=web-builder /app/web/dist ./web/dist
 
-EXPOSE 3000
+EXPOSE 3000 4141
 
 VOLUME /root/.local/share/copilot-api
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD wget --spider -q http://localhost:3000/api/accounts || exit 1
+  CMD wget --spider -q http://localhost:3000/api/auth/check || exit 1
 
 ENTRYPOINT ["bun", "run", "./src/main.ts", "console"]
-CMD ["--port", "3000"]
+CMD ["--web-port", "3000", "--proxy-port", "4141"]

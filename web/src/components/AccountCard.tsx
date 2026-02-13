@@ -121,7 +121,29 @@ function UsagePanel({ usage }: { usage: UsageData }) {
   )
 }
 
-function EndpointsPanel({ port }: { port: number }) {
+function useCopyFeedback(): [string | null, (text: string) => void] {
+  const [copied, setCopied] = useState<string | null>(null)
+  const copy = (text: string) => {
+    void navigator.clipboard.writeText(text)
+    setCopied(text)
+    setTimeout(() => setCopied(null), 1500)
+  }
+  return [copied, copy]
+}
+
+function ApiKeyPanel({
+  apiKey,
+  onRegenerate,
+}: {
+  apiKey: string
+  onRegenerate: () => void
+}) {
+  const [visible, setVisible] = useState(false)
+  const [copied, copy] = useCopyFeedback()
+  const safeKey = apiKey ?? ""
+  const masked = safeKey.length > 8 ? `${safeKey.slice(0, 8)}${"•".repeat(24)}` : safeKey
+  const isCopied = copied === safeKey
+
   return (
     <div
       style={{
@@ -131,22 +153,39 @@ function EndpointsPanel({ port }: { port: number }) {
         borderRadius: "var(--radius)",
         fontSize: 12,
         fontFamily: "monospace",
-        color: "var(--text-muted)",
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
       }}
     >
-      <div
+      <span style={{ color: "var(--text-muted)", flexShrink: 0 }}>
+        {isCopied ? "Copied!" : "API Key:"}
+      </span>
+      <span
+        onClick={() => copy(safeKey)}
         style={{
-          marginBottom: 4,
-          color: "var(--text)",
-          fontWeight: 500,
-          fontSize: 13,
+          cursor: "pointer",
+          flex: 1,
+          color: isCopied ? "var(--green)" : undefined,
         }}
+        title="Click to copy"
       >
-        Endpoints
-      </div>
-      <div>OpenAI: http://localhost:{port}/v1/chat/completions</div>
-      <div>Anthropic: http://localhost:{port}/v1/messages</div>
-      <div>Models: http://localhost:{port}/v1/models</div>
+        {visible ? safeKey : masked}
+      </span>
+      <button
+        type="button"
+        onClick={() => setVisible(!visible)}
+        style={{ padding: "2px 8px", fontSize: 11 }}
+      >
+        {visible ? "Hide" : "Show"}
+      </button>
+      <button
+        type="button"
+        onClick={onRegenerate}
+        style={{ padding: "2px 8px", fontSize: 11 }}
+      >
+        Regen
+      </button>
     </div>
   )
 }
@@ -159,6 +198,7 @@ function getUsageLabel(loading: boolean, visible: boolean): string {
 
 interface Props {
   account: Account
+  proxyPort: number
   onRefresh: () => Promise<void>
 }
 
@@ -166,15 +206,21 @@ function AccountActions({
   account,
   status,
   onRefresh,
+  onToggleUsage,
+  usageLoading,
+  showUsage,
 }: {
   account: Account
   status: string
   onRefresh: () => Promise<void>
+  onToggleUsage: () => void
+  usageLoading: boolean
+  showUsage: boolean
 }) {
   const [actionLoading, setActionLoading] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
 
-  const handleAction = async (action: () => Promise<void>) => {
+  const handleAction = async (action: () => Promise<unknown>) => {
     setActionLoading(true)
     try {
       await action()
@@ -192,20 +238,17 @@ function AccountActions({
       setTimeout(() => setConfirmDelete(false), 3000)
       return
     }
-    setActionLoading(true)
-    try {
-      await api.deleteAccount(account.id)
-      await onRefresh()
-    } catch (err) {
-      console.error("Delete failed:", err)
-    } finally {
-      setActionLoading(false)
-      setConfirmDelete(false)
-    }
+    await handleAction(() => api.deleteAccount(account.id))
+    setConfirmDelete(false)
   }
 
   return (
     <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+      {status === "running" && (
+        <button onClick={onToggleUsage} disabled={usageLoading}>
+          {getUsageLabel(usageLoading, showUsage)}
+        </button>
+      )}
       {status === "running" ?
         <button
           onClick={() => void handleAction(() => api.stopInstance(account.id))}
@@ -232,7 +275,71 @@ function AccountActions({
   )
 }
 
-function UsageSection({ accountId }: { accountId: string }) {
+function EndpointsPanel({ apiKey, proxyPort }: { apiKey: string; proxyPort: number }) {
+  const proxyBase = `${window.location.protocol}//${window.location.hostname}:${proxyPort}`
+  const safeKey = apiKey ?? "YOUR_API_KEY"
+  const [copied, copy] = useCopyFeedback()
+
+  const endpoints = [
+    { label: "OpenAI", path: "/v1/chat/completions" },
+    { label: "Anthropic", path: "/v1/messages" },
+    { label: "Models", path: "/v1/models" },
+    { label: "Embeddings", path: "/v1/embeddings" },
+  ]
+
+  return (
+    <div
+      style={{
+        marginTop: 12,
+        padding: 10,
+        background: "var(--bg)",
+        borderRadius: "var(--radius)",
+        fontSize: 12,
+      }}
+    >
+      <div
+        style={{
+          color: "var(--text-muted)",
+          marginBottom: 6,
+          display: "flex",
+          justifyContent: "space-between",
+        }}
+      >
+        <span>Endpoints (Bearer {safeKey.slice(0, 8)}...)</span>
+        <span style={{ fontFamily: "monospace" }}>{proxyBase}</span>
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+        {endpoints.map((ep) => {
+          const url = `${proxyBase}${ep.path}`
+          const isCopied = copied === url
+          return (
+            <span
+              key={ep.label}
+              onClick={() => copy(url)}
+              style={{
+                padding: "2px 8px",
+                background: isCopied ? "var(--green)" : "var(--bg-card)",
+                color: isCopied ? "#fff" : undefined,
+                border: `1px solid ${isCopied ? "var(--green)" : "var(--border)"}`,
+                borderRadius: 4,
+                fontFamily: "monospace",
+                cursor: "pointer",
+                fontSize: 11,
+                transition: "all 0.2s",
+              }}
+              title={url}
+            >
+              {isCopied ? "Copied!" : ep.label}
+            </span>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+export function AccountCard({ account, proxyPort, onRefresh }: Props) {
+  const status = account.status ?? "stopped"
   const [usage, setUsage] = useState<UsageData | null>(null)
   const [usageLoading, setUsageLoading] = useState(false)
   const [showUsage, setShowUsage] = useState(false)
@@ -244,7 +351,7 @@ function UsageSection({ accountId }: { accountId: string }) {
     }
     setUsageLoading(true)
     try {
-      const data = await api.getUsage(accountId)
+      const data = await api.getUsage(account.id)
       setUsage(data)
       setShowUsage(true)
     } catch {
@@ -255,29 +362,16 @@ function UsageSection({ accountId }: { accountId: string }) {
     }
   }
 
-  return (
-    <>
-      <button onClick={() => void handleToggleUsage()} disabled={usageLoading}>
-        {getUsageLabel(usageLoading, showUsage)}
-      </button>
-      {showUsage
-        && (usage ?
-          <UsagePanel usage={usage} />
-        : <div
-            style={{
-              marginTop: 12,
-              fontSize: 13,
-              color: "var(--text-muted)",
-            }}
-          >
-            Usage data unavailable. Make sure the instance is running.
-          </div>)}
-    </>
-  )
-}
-
-export function AccountCard({ account, onRefresh }: Props) {
-  const status = account.status ?? "stopped"
+  const handleRegenerate = () => {
+    void (async () => {
+      try {
+        await api.regenerateKey(account.id)
+        await onRefresh()
+      } catch (err) {
+        console.error("Regenerate failed:", err)
+      }
+    })()
+  }
 
   return (
     <div
@@ -311,7 +405,7 @@ export function AccountCard({ account, onRefresh }: Props) {
           </div>
           <div style={{ fontSize: 13, color: "var(--text-muted)" }}>
             {account.user?.login ? `@${account.user.login} · ` : ""}
-            Port {account.port} · {account.accountType}
+            {account.accountType}
           </div>
           {account.error && (
             <div style={{ fontSize: 12, color: "var(--red)", marginTop: 4 }}>
@@ -324,11 +418,28 @@ export function AccountCard({ account, onRefresh }: Props) {
           account={account}
           status={status}
           onRefresh={onRefresh}
+          onToggleUsage={() => void handleToggleUsage()}
+          usageLoading={usageLoading}
+          showUsage={showUsage}
         />
       </div>
 
-      {status === "running" && <EndpointsPanel port={account.port} />}
-      {status === "running" && <UsageSection accountId={account.id} />}
+      <ApiKeyPanel apiKey={account.apiKey} onRegenerate={handleRegenerate} />
+      {status === "running" && (
+        <EndpointsPanel apiKey={account.apiKey} proxyPort={proxyPort} />
+      )}
+      {showUsage
+        && (usage ?
+          <UsagePanel usage={usage} />
+        : <div
+            style={{
+              marginTop: 12,
+              fontSize: 13,
+              color: "var(--text-muted)",
+            }}
+          >
+            Usage data unavailable. Make sure the instance is running.
+          </div>)}
     </div>
   )
 }

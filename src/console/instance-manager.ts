@@ -2,19 +2,9 @@ import type { Context } from "hono"
 
 import consola from "consola"
 import { events } from "fetch-event-stream"
-import { Hono } from "hono"
-import { cors } from "hono/cors"
-import { logger } from "hono/logger"
 import { streamSSE } from "hono/streaming"
-import { serve, type ServerHandler } from "srvx"
 
 import type { State } from "~/lib/state"
-import type { AnthropicMessagesPayload } from "~/routes/messages/anthropic-types"
-import type {
-  ChatCompletionResponse,
-  ChatCompletionsPayload,
-  ChatCompletionChunk,
-} from "~/services/copilot/create-chat-completions"
 import type { ModelsResponse } from "~/services/copilot/get-models"
 
 import {
@@ -26,11 +16,17 @@ import {
 } from "~/lib/api-config"
 import { HTTPError } from "~/lib/error"
 import { getTokenCount } from "~/lib/tokenizer"
+import { type AnthropicMessagesPayload } from "~/routes/messages/anthropic-types"
 import {
-  translateToOpenAI,
   translateToAnthropic,
+  translateToOpenAI,
 } from "~/routes/messages/non-stream-translation"
 import { translateChunkToAnthropicEvents } from "~/routes/messages/stream-translation"
+import {
+  type ChatCompletionChunk,
+  type ChatCompletionResponse,
+  type ChatCompletionsPayload,
+} from "~/services/copilot/create-chat-completions"
 import { getVSCodeVersion } from "~/services/get-vscode-version"
 
 import type { Account } from "./account-store"
@@ -38,7 +34,6 @@ import type { Account } from "./account-store"
 interface ProxyInstance {
   account: Account
   state: State
-  server: ReturnType<typeof serve> | null
   status: "running" | "stopped" | "error"
   error?: string
   tokenInterval?: ReturnType<typeof setInterval>
@@ -107,26 +102,15 @@ export async function startInstance(account: Account): Promise<void> {
   }
 
   const st = createState(account)
-  const instance: ProxyInstance = {
-    account,
-    state: st,
-    server: null,
-    status: "stopped",
-  }
+  const instance: ProxyInstance = { account, state: st, status: "stopped" }
 
   try {
     st.vsCodeVersion = await getVSCodeVersion()
     await setupInstanceToken(instance)
     st.models = await fetchModels(st)
-
-    const app = createInstanceServer(instance)
-    instance.server = serve({
-      fetch: app.fetch as ServerHandler,
-      port: account.port,
-    })
     instance.status = "running"
     instances.set(account.id, instance)
-    consola.success(`[${account.name}] Proxy started on port ${account.port}`)
+    consola.success(`[${account.name}] Instance ready`)
   } catch (error) {
     instance.status = "error"
     instance.error = (error as Error).message
@@ -136,16 +120,13 @@ export async function startInstance(account: Account): Promise<void> {
   }
 }
 
-export async function stopInstance(accountId: string): Promise<void> {
+export function stopInstance(accountId: string): void {
   const instance = instances.get(accountId)
   if (!instance) return
-
   try {
     if (instance.tokenInterval) clearInterval(instance.tokenInterval)
-    if (instance.server) await instance.server.close()
     instance.status = "stopped"
-    instance.server = null
-    consola.info(`[${instance.account.name}] Proxy stopped`)
+    consola.info(`[${instance.account.name}] Instance stopped`)
   } catch (error) {
     consola.error(`[${instance.account.name}] Error stopping:`, error)
   }
@@ -157,6 +138,12 @@ export function getInstanceStatus(accountId: string): ProxyInstance["status"] {
 
 export function getInstanceError(accountId: string): string | undefined {
   return instances.get(accountId)?.error
+}
+
+export function getInstanceState(accountId: string): State | undefined {
+  const instance = instances.get(accountId)
+  if (!instance || instance.status !== "running") return undefined
+  return instance.state
 }
 
 export async function getInstanceUsage(accountId: string): Promise<unknown> {
@@ -193,49 +180,10 @@ export async function getInstanceUser(
   }
 }
 
-// === Per-instance server ===
-
-function createInstanceServer(instance: ProxyInstance): Hono {
-  const app = new Hono()
-  app.use(logger())
-  app.use(cors())
-
-  const st = instance.state
-
-  app.get("/", (c) => c.text(`Proxy running for ${instance.account.name}`))
-
-  app.post("/chat/completions", (c) => completionsHandler(c, st))
-  app.post("/v1/chat/completions", (c) => completionsHandler(c, st))
-  app.get("/models", (c) => modelsHandler(c, st))
-  app.get("/v1/models", (c) => modelsHandler(c, st))
-  app.post("/embeddings", (c) => embeddingsHandler(c, st))
-  app.post("/v1/embeddings", (c) => embeddingsHandler(c, st))
-  app.post("/v1/messages", (c) => messagesHandler(c, st))
-  app.post("/v1/messages/count_tokens", (c) => countTokensHandler(c, st))
-
-  app.get("/usage", async (c) => {
-    try {
-      const response = await fetch(
-        `${GITHUB_API_BASE_URL}/copilot_internal/user`,
-        { headers: githubHeaders(st) },
-      )
-      if (!response.ok) throw new HTTPError("Failed to get usage", response)
-      return c.json(await response.json())
-    } catch (error) {
-      return c.json({ error: (error as Error).message }, 500)
-    }
-  })
-
-  app.get("/token", (c) => c.json({ token: st.copilotToken }))
-
-  return app
-}
+// === Proxy handlers (used by unified router) ===
 
 interface CompletionsPayload {
-  messages: Array<{
-    role: string
-    content: unknown
-  }>
+  messages: Array<{ role: string; content: unknown }>
   model: string
   max_tokens?: number
   stream?: boolean
@@ -256,7 +204,10 @@ function isAgentRequest(messages: CompletionsPayload["messages"]): boolean {
   return messages.some((msg) => ["assistant", "tool"].includes(msg.role))
 }
 
-async function completionsHandler(c: Context, st: State) {
+export async function completionsHandler(
+  c: Context,
+  st: State,
+): Promise<Response> {
   try {
     const payload = await c.req.json<CompletionsPayload>()
 
@@ -305,7 +256,7 @@ async function completionsHandler(c: Context, st: State) {
   }
 }
 
-function modelsHandler(c: Context, st: State) {
+export function modelsHandler(c: Context, st: State): Response {
   const models =
     st.models?.data.map((model) => ({
       id: model.id,
@@ -319,7 +270,10 @@ function modelsHandler(c: Context, st: State) {
   return c.json({ object: "list", data: models, has_more: false })
 }
 
-async function embeddingsHandler(c: Context, st: State) {
+export async function embeddingsHandler(
+  c: Context,
+  st: State,
+): Promise<Response> {
   try {
     const payload = await c.req.json<Record<string, unknown>>()
     const response = await fetch(`${copilotBaseUrl(st)}/embeddings`, {
@@ -338,7 +292,10 @@ async function embeddingsHandler(c: Context, st: State) {
   }
 }
 
-async function messagesHandler(c: Context, st: State) {
+export async function messagesHandler(
+  c: Context,
+  st: State,
+): Promise<Response> {
   try {
     const anthropicPayload = await c.req.json<AnthropicMessagesPayload>()
     const openAIPayload = translateToOpenAI(anthropicPayload)
@@ -419,7 +376,10 @@ async function messagesHandler(c: Context, st: State) {
   }
 }
 
-async function countTokensHandler(c: Context, st: State) {
+export async function countTokensHandler(
+  c: Context,
+  st: State,
+): Promise<Response> {
   try {
     const anthropicPayload = await c.req.json<AnthropicMessagesPayload>()
     const openAIPayload: ChatCompletionsPayload =

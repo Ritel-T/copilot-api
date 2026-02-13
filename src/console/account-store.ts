@@ -1,3 +1,4 @@
+import crypto from "node:crypto"
 import fs from "node:fs/promises"
 import path from "node:path"
 
@@ -8,7 +9,7 @@ export interface Account {
   name: string
   githubToken: string
   accountType: string
-  port: number
+  apiKey: string
   enabled: boolean
   createdAt: string
 }
@@ -18,6 +19,10 @@ export interface AccountStore {
 }
 
 const STORE_PATH = path.join(PATHS.APP_DIR, "accounts.json")
+
+function generateApiKey(): string {
+  return `cpa-${crypto.randomBytes(16).toString("hex")}`
+}
 
 async function readStore(): Promise<AccountStore> {
   try {
@@ -42,13 +47,21 @@ export async function getAccount(id: string): Promise<Account | undefined> {
   return store.accounts.find((a) => a.id === id)
 }
 
+export async function getAccountByApiKey(
+  apiKey: string,
+): Promise<Account | undefined> {
+  const store = await readStore()
+  return store.accounts.find((a) => a.apiKey === apiKey)
+}
+
 export async function addAccount(
-  account: Omit<Account, "id" | "createdAt">,
+  account: Omit<Account, "id" | "createdAt" | "apiKey">,
 ): Promise<Account> {
   const store = await readStore()
   const newAccount: Account = {
     ...account,
     id: crypto.randomUUID(),
+    apiKey: generateApiKey(),
     createdAt: new Date().toISOString(),
   }
   store.accounts.push(newAccount)
@@ -58,7 +71,7 @@ export async function addAccount(
 
 export async function updateAccount(
   id: string,
-  updates: Partial<Omit<Account, "id" | "createdAt">>,
+  updates: Partial<Omit<Account, "id" | "createdAt" | "apiKey">>,
 ): Promise<Account | undefined> {
   const store = await readStore()
   const index = store.accounts.findIndex((a) => a.id === id)
@@ -75,4 +88,15 @@ export async function deleteAccount(id: string): Promise<boolean> {
   store.accounts.splice(index, 1)
   await writeStore(store)
   return true
+}
+
+export async function regenerateApiKey(
+  id: string,
+): Promise<Account | undefined> {
+  const store = await readStore()
+  const index = store.accounts.findIndex((a) => a.id === id)
+  if (index === -1) return undefined
+  store.accounts[index] = { ...store.accounts[index], apiKey: generateApiKey() }
+  await writeStore(store)
+  return store.accounts[index]
 }

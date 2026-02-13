@@ -1,11 +1,21 @@
 const BASE = "/api"
 
+let adminKey = ""
+
+export function setAdminKey(key: string): void {
+  adminKey = key
+}
+
+export function getAdminKey(): string {
+  return adminKey
+}
+
 export interface Account {
   id: string
   name: string
   githubToken: string
   accountType: string
-  port: number
+  apiKey: string
   enabled: boolean
   createdAt: string
   status?: "running" | "stopped" | "error"
@@ -47,13 +57,14 @@ interface ErrorBody {
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(options?.headers as Record<string, string>),
-    },
-  })
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(options?.headers as Record<string, string>),
+  }
+  if (adminKey) {
+    headers["Authorization"] = `Bearer ${adminKey}`
+  }
+  const res = await fetch(`${BASE}${path}`, { ...options, headers })
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as ErrorBody
     throw new Error(body.error ?? `HTTP ${res.status}`)
@@ -62,24 +73,11 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  checkAuth: () => request<{ ok: boolean }>("/auth/check"),
+
+  getConfig: () => request<{ proxyPort: number }>("/config"),
+
   getAccounts: () => request<Array<Account>>("/accounts"),
-
-  addAccount: (data: {
-    name: string
-    githubToken: string
-    accountType: string
-    port: number
-  }) =>
-    request<Account>("/accounts", {
-      method: "POST",
-      body: JSON.stringify(data),
-    }),
-
-  updateAccount: (id: string, data: Partial<Account>) =>
-    request<Account>(`/accounts/${id}`, {
-      method: "PUT",
-      body: JSON.stringify(data),
-    }),
 
   deleteAccount: (id: string) =>
     request<{ ok: boolean }>(`/accounts/${id}`, { method: "DELETE" }),
@@ -92,6 +90,9 @@ export const api = {
 
   getUsage: (id: string) => request<UsageData>(`/accounts/${id}/usage`),
 
+  regenerateKey: (id: string) =>
+    request<Account>(`/accounts/${id}/regenerate-key`, { method: "POST" }),
+
   startDeviceCode: () =>
     request<DeviceCodeResponse>("/auth/device-code", { method: "POST" }),
 
@@ -102,25 +103,9 @@ export const api = {
     sessionId: string
     name: string
     accountType: string
-    port: number
   }) =>
     request<Account>("/auth/complete", {
       method: "POST",
       body: JSON.stringify(data),
     }),
-
-  checkPort: (port: number, excludeId?: string) =>
-    request<{
-      available: boolean
-      conflict?: string
-      accountName?: string
-    }>(`/port/check/${port}${excludeId ? `?exclude=${excludeId}` : ""}`),
-
-  suggestPort: (start?: number, excludeId?: string) => {
-    const params = new URLSearchParams()
-    if (start !== undefined) params.set("start", String(start))
-    if (excludeId) params.set("exclude", excludeId)
-    const qs = params.toString()
-    return request<{ port: number }>(`/port/suggest${qs ? `?${qs}` : ""}`)
-  },
 }
