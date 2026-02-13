@@ -3,7 +3,6 @@ import consola from "consola"
 import { Hono } from "hono"
 import { cors } from "hono/cors"
 import { logger } from "hono/logger"
-import crypto from "node:crypto"
 import fs from "node:fs/promises"
 import path from "node:path"
 import { serve, type ServerHandler } from "srvx"
@@ -11,7 +10,7 @@ import { serve, type ServerHandler } from "srvx"
 import { ensurePaths } from "~/lib/paths"
 
 import { getAccountByApiKey, getAccounts } from "./account-store"
-import { consoleApi, setAdminKey, setProxyPort } from "./api"
+import { consoleApi, setProxyPort } from "./api"
 import {
   completionsHandler,
   countTokensHandler,
@@ -50,10 +49,6 @@ export const console_ = defineCommand({
       default: "4141",
       description: "Port for the proxy API endpoints",
     },
-    "admin-key": {
-      type: "string",
-      description: "Admin key for console access (auto-generated if not set)",
-    },
     verbose: {
       alias: "v",
       type: "boolean",
@@ -76,10 +71,6 @@ export const console_ = defineCommand({
 
     const webPort = Number.parseInt(args["web-port"], 10)
     const proxyPort = Number.parseInt(args["proxy-port"], 10)
-    const adminKeyArg = args["admin-key"] as string | undefined
-    const generatedAdminKey =
-      adminKeyArg ?? `admin-${crypto.randomBytes(8).toString("hex")}`
-    setAdminKey(generatedAdminKey)
     setProxyPort(proxyPort)
 
     // === Web console server ===
@@ -105,7 +96,7 @@ export const console_ = defineCommand({
     consola.box(
       [
         `🎛️  Console:  http://localhost:${webPort}`,
-        `🔑 Admin Key: ${generatedAdminKey}`,
+        `🔐 First visit to set up admin account`,
         "",
         `Proxy (port ${proxyPort}) — use account API key as Bearer token:`,
         `   OpenAI:    http://localhost:${proxyPort}/v1/chat/completions`,

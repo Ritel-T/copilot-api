@@ -1,25 +1,36 @@
 import { useCallback, useEffect, useState } from "react"
 
-import { api, getAdminKey, setAdminKey, type Account } from "./api"
+import { api, getSessionToken, setSessionToken, type Account } from "./api"
 import { AccountCard } from "./components/AccountCard"
 import { AddAccountForm } from "./components/AddAccountForm"
 
-function LoginForm({ onLogin }: { onLogin: () => void }) {
-  const [key, setKey] = useState("")
+type AuthState = "loading" | "setup" | "login" | "authed"
+
+function SetupForm({ onComplete }: { onComplete: () => void }) {
+  const [username, setUsername] = useState("")
+  const [password, setPassword] = useState("")
+  const [confirm, setConfirm] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
 
   const handleSubmit = async (e: React.SyntheticEvent) => {
     e.preventDefault()
     setError("")
+    if (password !== confirm) {
+      setError("Passwords do not match")
+      return
+    }
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters")
+      return
+    }
     setLoading(true)
-    setAdminKey(key.trim())
     try {
-      await api.checkAuth()
-      onLogin()
-    } catch {
-      setAdminKey("")
-      setError("Invalid admin key")
+      const { token } = await api.setup(username, password)
+      setSessionToken(token)
+      onComplete()
+    } catch (err) {
+      setError((err as Error).message)
     } finally {
       setLoading(false)
     }
@@ -31,15 +42,32 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
         Copilot API Console
       </h1>
       <p style={{ color: "var(--text-muted)", fontSize: 14, marginBottom: 24 }}>
-        Enter admin key to continue
+        Create your admin account to get started
       </p>
       <form onSubmit={(e) => void handleSubmit(e)}>
         <input
-          type="password"
-          value={key}
-          onChange={(e) => setKey(e.target.value)}
-          placeholder="Admin key"
+          type="text"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          placeholder="Username"
           autoFocus
+          autoComplete="username"
+          style={{ marginBottom: 12 }}
+        />
+        <input
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="Password (min 6 chars)"
+          autoComplete="new-password"
+          style={{ marginBottom: 12 }}
+        />
+        <input
+          type="password"
+          value={confirm}
+          onChange={(e) => setConfirm(e.target.value)}
+          placeholder="Confirm password"
+          autoComplete="new-password"
           style={{ marginBottom: 12 }}
         />
         {error && (
@@ -48,7 +76,67 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
           </div>
         )}
         <button type="submit" className="primary" disabled={loading}>
-          {loading ? "Checking..." : "Login"}
+          {loading ? "Creating..." : "Create Admin Account"}
+        </button>
+      </form>
+    </div>
+  )
+}
+
+function LoginForm({ onLogin }: { onLogin: () => void }) {
+  const [username, setUsername] = useState("")
+  const [password, setPassword] = useState("")
+  const [error, setError] = useState("")
+  const [loading, setLoading] = useState(false)
+
+  const handleSubmit = async (e: React.SyntheticEvent) => {
+    e.preventDefault()
+    setError("")
+    setLoading(true)
+    try {
+      const { token } = await api.login(username, password)
+      setSessionToken(token)
+      onLogin()
+    } catch {
+      setError("Invalid username or password")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div style={{ maxWidth: 400, margin: "120px auto", padding: "0 16px" }}>
+      <h1 style={{ fontSize: 22, fontWeight: 600, marginBottom: 8 }}>
+        Copilot API Console
+      </h1>
+      <p style={{ color: "var(--text-muted)", fontSize: 14, marginBottom: 24 }}>
+        Sign in to continue
+      </p>
+      <form onSubmit={(e) => void handleSubmit(e)}>
+        <input
+          type="text"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          placeholder="Username"
+          autoFocus
+          autoComplete="username"
+          style={{ marginBottom: 12 }}
+        />
+        <input
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="Password"
+          autoComplete="current-password"
+          style={{ marginBottom: 12 }}
+        />
+        {error && (
+          <div style={{ color: "var(--red)", fontSize: 13, marginBottom: 12 }}>
+            {error}
+          </div>
+        )}
+        <button type="submit" className="primary" disabled={loading}>
+          {loading ? "Signing in..." : "Sign In"}
         </button>
       </form>
     </div>
@@ -84,7 +172,12 @@ function AccountList({
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       {accounts.map((account) => (
-        <AccountCard key={account.id} account={account} proxyPort={proxyPort} onRefresh={onRefresh} />
+        <AccountCard
+          key={account.id}
+          account={account}
+          proxyPort={proxyPort}
+          onRefresh={onRefresh}
+        />
       ))}
     </div>
   )
@@ -119,6 +212,11 @@ function Dashboard() {
     await refresh()
   }
 
+  const handleLogout = () => {
+    setSessionToken("")
+    window.location.reload()
+  }
+
   return (
     <div style={{ maxWidth: 960, margin: "0 auto", padding: "24px 16px" }}>
       <header
@@ -135,9 +233,12 @@ function Dashboard() {
             Manage multiple GitHub Copilot proxy accounts
           </p>
         </div>
-        <button className="primary" onClick={() => setShowForm(!showForm)}>
-          {showForm ? "Cancel" : "+ Add Account"}
-        </button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="primary" onClick={() => setShowForm(!showForm)}>
+            {showForm ? "Cancel" : "+ Add Account"}
+          </button>
+          <button onClick={handleLogout}>Logout</button>
+        </div>
       </header>
 
       {showForm && (
@@ -157,14 +258,65 @@ function Dashboard() {
         >
           Loading...
         </p>
-      : <AccountList accounts={accounts} proxyPort={proxyPort} onRefresh={refresh} />}
+      : <AccountList
+          accounts={accounts}
+          proxyPort={proxyPort}
+          onRefresh={refresh}
+        />
+      }
     </div>
   )
 }
 
 export function App() {
-  const [authed, setAuthed] = useState(Boolean(getAdminKey()))
+  const [authState, setAuthState] = useState<AuthState>("loading")
 
-  if (!authed) return <LoginForm onLogin={() => setAuthed(true)} />
+  useEffect(() => {
+    void (async () => {
+      try {
+        const config = await api.getConfig()
+        if (config.needsSetup) {
+          setAuthState("setup")
+          return
+        }
+        const token = getSessionToken()
+        if (token) {
+          try {
+            await api.checkAuth()
+            setAuthState("authed")
+            return
+          } catch {
+            setSessionToken("")
+          }
+        }
+        setAuthState("login")
+      } catch {
+        setAuthState("login")
+      }
+    })()
+  }, [])
+
+  if (authState === "loading") {
+    return (
+      <div
+        style={{
+          color: "var(--text-muted)",
+          textAlign: "center",
+          padding: 120,
+        }}
+      >
+        Loading...
+      </div>
+    )
+  }
+
+  if (authState === "setup") {
+    return <SetupForm onComplete={() => setAuthState("authed")} />
+  }
+
+  if (authState === "login") {
+    return <LoginForm onLogin={() => setAuthState("authed")} />
+  }
+
   return <Dashboard />
 }

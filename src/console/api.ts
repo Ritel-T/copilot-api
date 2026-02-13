@@ -10,6 +10,12 @@ import {
   regenerateApiKey,
   updateAccount,
 } from "./account-store"
+import {
+  isSetupRequired,
+  loginAdmin,
+  setupAdmin,
+  validateSession,
+} from "./admin-auth"
 import { cleanupSession, getSession, startDeviceFlow } from "./auth-flow"
 import {
   getInstanceError,
@@ -20,11 +26,6 @@ import {
   stopInstance,
 } from "./instance-manager"
 
-let adminKey = ""
-
-export function setAdminKey(key: string): void {
-  adminKey = key
-}
 let proxyPort = 4141
 
 export function setProxyPort(port: number): void {
@@ -41,21 +42,60 @@ export const consoleApi = new Hono()
 
 consoleApi.use(cors())
 
-// Public config (no auth required)
-consoleApi.get("/config", (c) => c.json({ proxyPort }))
+// Public endpoints (no auth required)
+consoleApi.get("/config", async (c) => {
+  const needsSetup = await isSetupRequired()
+  return c.json({ proxyPort, needsSetup })
+})
 
-// Admin auth middleware
+const SetupSchema = z.object({
+  username: z.string().min(1),
+  password: z.string().min(6),
+})
+
+consoleApi.post("/auth/setup", async (c) => {
+  const body: unknown = await c.req.json()
+  const parsed = SetupSchema.safeParse(body)
+  if (!parsed.success) {
+    return c.json({ error: formatZodError(parsed.error) }, 400)
+  }
+  try {
+    const token = await setupAdmin(parsed.data.username, parsed.data.password)
+    return c.json({ token })
+  } catch (error) {
+    return c.json({ error: (error as Error).message }, 400)
+  }
+})
+
+const LoginSchema = z.object({
+  username: z.string().min(1),
+  password: z.string().min(1),
+})
+
+consoleApi.post("/auth/login", async (c) => {
+  const body: unknown = await c.req.json()
+  const parsed = LoginSchema.safeParse(body)
+  if (!parsed.success) {
+    return c.json({ error: formatZodError(parsed.error) }, 400)
+  }
+  const token = await loginAdmin(parsed.data.username, parsed.data.password)
+  if (!token) {
+    return c.json({ error: "Invalid username or password" }, 401)
+  }
+  return c.json({ token })
+})
+
+// Admin auth middleware (session token)
 consoleApi.use("/*", async (c, next) => {
-  if (!adminKey) return next()
   const auth = c.req.header("authorization")
   const token = auth?.replace("Bearer ", "")
-  if (token !== adminKey) {
+  if (!token || !(await validateSession(token))) {
     return c.json({ error: "Unauthorized" }, 401)
   }
   return next()
 })
 
-// Auth check endpoint (for frontend login)
+// Auth check endpoint
 consoleApi.get("/auth/check", (c) => c.json({ ok: true }))
 
 // List all accounts with status

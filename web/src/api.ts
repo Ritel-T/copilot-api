@@ -1,13 +1,21 @@
 const BASE = "/api"
 
-let adminKey = ""
+let sessionToken = ""
 
-export function setAdminKey(key: string): void {
-  adminKey = key
+export function setSessionToken(token: string): void {
+  sessionToken = token
+  if (token) {
+    localStorage.setItem("sessionToken", token)
+  } else {
+    localStorage.removeItem("sessionToken")
+  }
 }
 
-export function getAdminKey(): string {
-  return adminKey
+export function getSessionToken(): string {
+  if (!sessionToken) {
+    sessionToken = localStorage.getItem("sessionToken") ?? ""
+  }
+  return sessionToken
 }
 
 export interface Account {
@@ -52,6 +60,11 @@ export interface AuthPollResponse {
   error?: string
 }
 
+export interface ConfigResponse {
+  proxyPort: number
+  needsSetup: boolean
+}
+
 interface ErrorBody {
   error?: string
 }
@@ -61,8 +74,9 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     "Content-Type": "application/json",
     ...(options?.headers as Record<string, string>),
   }
-  if (adminKey) {
-    headers["Authorization"] = `Bearer ${adminKey}`
+  const token = getSessionToken()
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`
   }
   const res = await fetch(`${BASE}${path}`, { ...options, headers })
   if (!res.ok) {
@@ -73,9 +87,21 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  checkAuth: () => request<{ ok: boolean }>("/auth/check"),
+  getConfig: () => request<ConfigResponse>("/config"),
 
-  getConfig: () => request<{ proxyPort: number }>("/config"),
+  setup: (username: string, password: string) =>
+    request<{ token: string }>("/auth/setup", {
+      method: "POST",
+      body: JSON.stringify({ username, password }),
+    }),
+
+  login: (username: string, password: string) =>
+    request<{ token: string }>("/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ username, password }),
+    }),
+
+  checkAuth: () => request<{ ok: boolean }>("/auth/check"),
 
   getAccounts: () => request<Array<Account>>("/accounts"),
 
