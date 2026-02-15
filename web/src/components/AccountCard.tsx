@@ -343,6 +343,10 @@ export function AccountCard({ account, proxyPort, onRefresh }: Props) {
   const [usage, setUsage] = useState<UsageData | null>(null)
   const [usageLoading, setUsageLoading] = useState(false)
   const [showUsage, setShowUsage] = useState(false)
+  const [editingPriority, setEditingPriority] = useState(false)
+  const [priorityValue, setPriorityValue] = useState(
+    String(account.priority ?? 0),
+  )
 
   const handleToggleUsage = async () => {
     if (showUsage) {
@@ -371,6 +375,27 @@ export function AccountCard({ account, proxyPort, onRefresh }: Props) {
         console.error("Regenerate failed:", err)
       }
     })()
+  }
+
+  const handlePrioritySave = () => {
+    const num = parseInt(priorityValue, 10)
+    if (isNaN(num) || num < 0) {
+      setPriorityValue(String(account.priority ?? 0))
+      setEditingPriority(false)
+      return
+    }
+    setEditingPriority(false)
+    if (num !== (account.priority ?? 0)) {
+      void (async () => {
+        try {
+          await api.updateAccount(account.id, { priority: num })
+          await onRefresh()
+        } catch (err) {
+          console.error("Priority update failed:", err)
+          setPriorityValue(String(account.priority ?? 0))
+        }
+      })()
+    }
   }
 
   return (
@@ -422,6 +447,60 @@ export function AccountCard({ account, proxyPort, onRefresh }: Props) {
           usageLoading={usageLoading}
           showUsage={showUsage}
         />
+      </div>
+
+      <div
+        style={{
+          marginTop: 10,
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          fontSize: 13,
+        }}
+      >
+        <span style={{ color: "var(--text-muted)" }}>Priority:</span>
+        {editingPriority ? (
+          <input
+            type="number"
+            value={priorityValue}
+            onChange={(e) => setPriorityValue(e.target.value)}
+            onBlur={handlePrioritySave}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handlePrioritySave()
+              if (e.key === "Escape") {
+                setPriorityValue(String(account.priority ?? 0))
+                setEditingPriority(false)
+              }
+            }}
+            autoFocus
+            min={0}
+            style={{
+              width: 60,
+              padding: "2px 6px",
+              fontSize: 13,
+              display: "inline-block",
+            }}
+          />
+        ) : (
+          <span
+            onClick={() => setEditingPriority(true)}
+            style={{
+              cursor: "pointer",
+              padding: "2px 10px",
+              background: "var(--bg)",
+              border: "1px solid var(--border)",
+              borderRadius: 4,
+              fontFamily: "monospace",
+              fontSize: 13,
+            }}
+            title="Click to edit"
+          >
+            {account.priority ?? 0}
+          </span>
+        )}
+        <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
+          Higher value = higher priority
+        </span>
       </div>
 
       <ApiKeyPanel apiKey={account.apiKey} onRegenerate={handleRegenerate} />

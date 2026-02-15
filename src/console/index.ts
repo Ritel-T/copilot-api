@@ -9,7 +9,7 @@ import { serve, type ServerHandler } from "srvx"
 
 import { ensurePaths } from "~/lib/paths"
 
-import { getAccountByApiKey, getAccounts } from "./account-store"
+import { getAccountByApiKey, getAccounts, getPoolConfig } from "./account-store"
 import { consoleApi, setProxyPort } from "./api"
 import {
   completionsHandler,
@@ -20,6 +20,7 @@ import {
   modelsHandler,
   startInstance,
 } from "./instance-manager"
+import { selectAccount } from "./load-balancer"
 
 const MIME_TYPES: Record<string, string> = {
   ".html": "text/html",
@@ -109,20 +110,20 @@ export const console_ = defineCommand({
 
 function mountProxyRoutes(app: Hono): void {
   app.post("/chat/completions", proxyAuth, (c) =>
-    completionsHandler(c, getState(c)),
+    withPoolRetry(c, completionsHandler),
   )
   app.post("/v1/chat/completions", proxyAuth, (c) =>
-    completionsHandler(c, getState(c)),
+    withPoolRetry(c, completionsHandler),
   )
   app.get("/models", proxyAuth, (c) => modelsHandler(c, getState(c)))
   app.get("/v1/models", proxyAuth, (c) => modelsHandler(c, getState(c)))
-  app.post("/embeddings", proxyAuth, (c) => embeddingsHandler(c, getState(c)))
+  app.post("/embeddings", proxyAuth, (c) => withPoolRetry(c, embeddingsHandler))
   app.post("/v1/embeddings", proxyAuth, (c) =>
-    embeddingsHandler(c, getState(c)),
+    withPoolRetry(c, embeddingsHandler),
   )
-  app.post("/v1/messages", proxyAuth, (c) => messagesHandler(c, getState(c)))
+  app.post("/v1/messages", proxyAuth, (c) => withPoolRetry(c, messagesHandler))
   app.post("/v1/messages/count_tokens", proxyAuth, (c) =>
-    countTokensHandler(c, getState(c)),
+    withPoolRetry(c, countTokensHandler),
   )
 }
 
@@ -194,21 +195,90 @@ async function proxyAuth(
 ): Promise<Response | undefined> {
   const auth = c.req.header("authorization")
   const token = auth?.replace(/^Bearer\s+/i, "")
-  if (!token) {
-    return c.json({ error: "Missing API key" }, 401)
+
+  // Try per-account key first
+  if (token) {
+    const account = await getAccountByApiKey(token)
+    if (account) {
+      const st = getInstanceState(account.id)
+      if (!st) {
+        return c.json({ error: "Account instance not running" }, 503)
+      }
+      c.set("proxyState", st)
+      await next()
+      return
+    }
   }
-  const account = await getAccountByApiKey(token)
-  if (!account) {
+
+  // Fall back to pool mode
+  const poolConfig = await getPoolConfig()
+  if (!poolConfig?.enabled || !token || token !== poolConfig.apiKey) {
     return c.json({ error: "Invalid API key" }, 401)
   }
-  const st = getInstanceState(account.id)
-  if (!st) {
-    return c.json({ error: "Account instance not running" }, 503)
+
+  const result = await selectAccount(poolConfig.strategy)
+  if (!result) {
+    return c.json({ error: "No available accounts in pool" }, 503)
   }
-  c.set("proxyState", st)
-  return next()
+
+  c.set("proxyState", result.state)
+  c.set("poolMode", true)
+  c.set("poolStrategy", poolConfig.strategy)
+  c.set("poolAccountId", result.account.id)
+  await next()
 }
 
 function getState(c: import("hono").Context): import("~/lib/state").State {
   return c.get("proxyState") as import("~/lib/state").State
+}
+
+type Handler = (
+  c: import("hono").Context,
+  st: import("~/lib/state").State,
+) => Promise<Response> | Response
+
+async function withPoolRetry(
+  c: import("hono").Context,
+  handler: Handler,
+): Promise<Response> {
+  const isPool = c.get("poolMode") as boolean | undefined
+  if (!isPool) {
+    return handler(c, getState(c))
+  }
+
+  // Buffer the body for potential retries
+  const body: unknown = await c.req.json()
+  c.set("bufferedBody", body)
+
+  const strategy = c.get("poolStrategy") as "round-robin" | "priority"
+  const exclude = new Set<string>()
+
+  // First attempt with the account already selected by proxyAuth
+  const firstResponse = await handler(c, getState(c))
+  if (!isRetryableStatus(firstResponse.status)) {
+    return firstResponse
+  }
+
+  // Add the first account to exclude list and retry with others
+  exclude.add(c.get("poolAccountId") as string)
+
+  while (true) {
+    const next = await selectAccount(strategy, exclude)
+    if (!next) {
+      // No more accounts to try, return the last error response
+      return firstResponse
+    }
+
+    exclude.add(next.account.id)
+    c.set("proxyState", next.state)
+
+    const retryResponse = await handler(c, next.state)
+    if (!isRetryableStatus(retryResponse.status)) {
+      return retryResponse
+    }
+  }
+}
+
+function isRetryableStatus(status: number): boolean {
+  return status === 429 || status >= 500
 }

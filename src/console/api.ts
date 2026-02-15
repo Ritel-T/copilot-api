@@ -7,8 +7,11 @@ import {
   deleteAccount,
   getAccount,
   getAccounts,
+  getPoolConfig,
   regenerateApiKey,
+  regeneratePoolApiKey,
   updateAccount,
+  updatePoolConfig,
 } from "./account-store"
 import {
   isSetupRequired,
@@ -133,6 +136,7 @@ const AddAccountSchema = z.object({
   githubToken: z.string().min(1),
   accountType: z.string().default("individual"),
   enabled: z.boolean().default(true),
+  priority: z.number().int().min(0).default(0),
 })
 
 // Add account
@@ -151,6 +155,7 @@ const UpdateAccountSchema = z.object({
   githubToken: z.string().min(1).optional(),
   accountType: z.string().optional(),
   enabled: z.boolean().optional(),
+  priority: z.number().int().min(0).optional(),
 })
 
 // Update account
@@ -257,4 +262,31 @@ consoleApi.post("/auth/complete", async (c) => {
 
   cleanupSession(parsed.data.sessionId)
   return c.json(account, 201)
+})
+
+// === Pool Configuration ===
+
+consoleApi.get("/pool", async (c) => {
+  const config = await getPoolConfig()
+  return c.json(config ?? { enabled: false, strategy: "round-robin" })
+})
+
+const UpdatePoolSchema = z.object({
+  enabled: z.boolean().optional(),
+  strategy: z.enum(["round-robin", "priority"]).optional(),
+})
+
+consoleApi.put("/pool", async (c) => {
+  const body: unknown = await c.req.json()
+  const parsed = UpdatePoolSchema.safeParse(body)
+  if (!parsed.success) {
+    return c.json({ error: formatZodError(parsed.error) }, 400)
+  }
+  const config = await updatePoolConfig(parsed.data)
+  return c.json(config)
+})
+
+consoleApi.post("/pool/regenerate-key", async (c) => {
+  const config = await regeneratePoolApiKey()
+  return c.json(config)
 })

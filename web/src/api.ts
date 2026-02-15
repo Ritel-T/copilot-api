@@ -26,6 +26,7 @@ export interface Account {
   apiKey: string
   enabled: boolean
   createdAt: string
+  priority: number
   status?: "running" | "stopped" | "error"
   error?: string
   user?: { login: string } | null
@@ -45,6 +46,12 @@ interface QuotaDetail {
   entitlement: number
   remaining: number
   percent_remaining: number
+}
+
+export interface PoolConfig {
+  enabled: boolean
+  strategy: "round-robin" | "priority"
+  apiKey: string
 }
 
 export interface DeviceCodeResponse {
@@ -134,4 +141,21 @@ export const api = {
       method: "POST",
       body: JSON.stringify(data),
     }),
+
+  updateAccount: (id: string, data: Record<string, unknown>) =>
+    request<Account>(`/accounts/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+
+  getPool: () => request<PoolConfig>("/pool"),
+
+  updatePool: (data: Partial<PoolConfig>) =>
+    request<PoolConfig>("/pool", {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+
+  regeneratePoolKey: () =>
+    request<PoolConfig>("/pool/regenerate-key", { method: "POST" }),
 }

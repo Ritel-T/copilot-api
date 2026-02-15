@@ -209,7 +209,9 @@ export async function completionsHandler(
   st: State,
 ): Promise<Response> {
   try {
-    const payload = await c.req.json<CompletionsPayload>()
+    const payload =
+      (c.get("bufferedBody") as CompletionsPayload | undefined)
+      ?? (await c.req.json<CompletionsPayload>())
 
     const headers: Record<string, string> = {
       ...copilotHeaders(st, hasVisionContent(payload.messages)),
@@ -275,7 +277,9 @@ export async function embeddingsHandler(
   st: State,
 ): Promise<Response> {
   try {
-    const payload = await c.req.json<Record<string, unknown>>()
+    const payload =
+      (c.get("bufferedBody") as Record<string, unknown> | undefined)
+      ?? (await c.req.json<Record<string, unknown>>())
     const response = await fetch(`${copilotBaseUrl(st)}/embeddings`, {
       method: "POST",
       headers: copilotHeaders(st),
@@ -297,7 +301,9 @@ export async function messagesHandler(
   st: State,
 ): Promise<Response> {
   try {
-    const anthropicPayload = await c.req.json<AnthropicMessagesPayload>()
+    const anthropicPayload =
+      (c.get("bufferedBody") as AnthropicMessagesPayload | undefined)
+      ?? (await c.req.json<AnthropicMessagesPayload>())
     const openAIPayload = translateToOpenAI(anthropicPayload)
 
     if (!openAIPayload.max_tokens) {
@@ -381,7 +387,9 @@ export async function countTokensHandler(
   st: State,
 ): Promise<Response> {
   try {
-    const anthropicPayload = await c.req.json<AnthropicMessagesPayload>()
+    const anthropicPayload =
+      (c.get("bufferedBody") as AnthropicMessagesPayload | undefined)
+      ?? (await c.req.json<AnthropicMessagesPayload>())
     const openAIPayload: ChatCompletionsPayload =
       translateToOpenAI(anthropicPayload)
 

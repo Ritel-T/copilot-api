@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react"
 
-import { api, getSessionToken, setSessionToken, type Account } from "./api"
+import { api, getSessionToken, setSessionToken, type Account, type PoolConfig } from "./api"
 import { AccountCard } from "./components/AccountCard"
 import { AddAccountForm } from "./components/AddAccountForm"
 
@@ -183,11 +183,191 @@ function AccountList({
   )
 }
 
+function PoolSettings({
+  pool,
+  proxyPort,
+  onChange,
+}: {
+  pool: PoolConfig
+  proxyPort: number
+  onChange: (p: PoolConfig) => void
+}) {
+  const [saving, setSaving] = useState(false)
+  const [keyVisible, setKeyVisible] = useState(false)
+  const [copied, setCopied] = useState(false)
+
+  const toggle = async () => {
+    setSaving(true)
+    try {
+      const updated = await api.updatePool({ enabled: !pool.enabled })
+      onChange(updated)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const changeStrategy = async (strategy: PoolConfig["strategy"]) => {
+    setSaving(true)
+    try {
+      const updated = await api.updatePool({ strategy })
+      onChange(updated)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const regenKey = async () => {
+    setSaving(true)
+    try {
+      const updated = await api.regeneratePoolKey()
+      onChange(updated)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const copyKey = () => {
+    void navigator.clipboard.writeText(pool.apiKey)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
+  }
+
+  const maskedKey =
+    pool.apiKey?.length > 8
+      ? `${pool.apiKey.slice(0, 8)}${"•".repeat(24)}`
+      : pool.apiKey ?? ""
+
+  const proxyBase = `${window.location.protocol}//${window.location.hostname}:${proxyPort}`
+
+  return (
+    <div
+      style={{
+        background: "var(--bg-card)",
+        border: "1px solid var(--border)",
+        borderRadius: "var(--radius)",
+        padding: 16,
+        marginBottom: 16,
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+        }}
+      >
+        <div>
+          <div style={{ fontSize: 15, fontWeight: 600 }}>Pool Mode</div>
+          <div style={{ fontSize: 13, color: "var(--text-muted)" }}>
+            {pool.enabled
+              ? "Requests with pool key are load-balanced across running accounts"
+              : "Enable to auto-distribute requests across accounts"}
+          </div>
+        </div>
+        <button
+          className={pool.enabled ? undefined : "primary"}
+          onClick={() => void toggle()}
+          disabled={saving}
+          style={{ flexShrink: 0 }}
+        >
+          {pool.enabled ? "Disable" : "Enable"}
+        </button>
+      </div>
+      {pool.enabled && (
+        <>
+          <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
+            {(["round-robin", "priority"] as const).map((s) => (
+              <button
+                key={s}
+                className={pool.strategy === s ? "primary" : undefined}
+                onClick={() => void changeStrategy(s)}
+                disabled={saving || pool.strategy === s}
+                style={{ fontSize: 13 }}
+              >
+                {s === "round-robin" ? "Round Robin" : "Priority"}
+              </button>
+            ))}
+            <span
+              style={{
+                fontSize: 12,
+                color: "var(--text-muted)",
+                alignSelf: "center",
+                marginLeft: 4,
+              }}
+            >
+              {pool.strategy === "round-robin"
+                ? "Evenly distribute across accounts"
+                : "Prefer higher-priority accounts first"}
+            </span>
+          </div>
+          <div
+            style={{
+              marginTop: 12,
+              padding: 10,
+              background: "var(--bg)",
+              borderRadius: "var(--radius)",
+              fontSize: 12,
+              fontFamily: "monospace",
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+            }}
+          >
+            <span style={{ color: "var(--text-muted)", flexShrink: 0 }}>
+              {copied ? "Copied!" : "Pool Key:"}
+            </span>
+            <span
+              onClick={copyKey}
+              style={{
+                cursor: "pointer",
+                flex: 1,
+                color: copied ? "var(--green)" : undefined,
+              }}
+              title="Click to copy"
+            >
+              {keyVisible ? pool.apiKey : maskedKey}
+            </span>
+            <button
+              type="button"
+              onClick={() => setKeyVisible(!keyVisible)}
+              style={{ padding: "2px 8px", fontSize: 11 }}
+            >
+              {keyVisible ? "Hide" : "Show"}
+            </button>
+            <button
+              type="button"
+              onClick={() => void regenKey()}
+              disabled={saving}
+              style={{ padding: "2px 8px", fontSize: 11 }}
+            >
+              Regen
+            </button>
+          </div>
+          <div
+            style={{
+              marginTop: 8,
+              fontSize: 12,
+              color: "var(--text-muted)",
+              fontFamily: "monospace",
+            }}
+          >
+            Base URL: {proxyBase} &nbsp;·&nbsp; Bearer {pool.apiKey?.slice(0, 8)}...
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 function Dashboard() {
   const [accounts, setAccounts] = useState<Array<Account>>([])
   const [showForm, setShowForm] = useState(false)
   const [loading, setLoading] = useState(true)
   const [proxyPort, setProxyPort] = useState(4141)
+  const [pool, setPool] = useState<PoolConfig>({
+    enabled: false,
+    strategy: "round-robin",
+  })
 
   const refresh = useCallback(async () => {
     try {
@@ -202,6 +382,7 @@ function Dashboard() {
 
   useEffect(() => {
     void api.getConfig().then((cfg) => setProxyPort(cfg.proxyPort))
+    void api.getPool().then(setPool).catch(() => {})
     void refresh()
     const interval = setInterval(() => void refresh(), 5000)
     return () => clearInterval(interval)
@@ -240,6 +421,8 @@ function Dashboard() {
           <button onClick={handleLogout}>Logout</button>
         </div>
       </header>
+
+      <PoolSettings pool={pool} proxyPort={proxyPort} onChange={setPool} />
 
       {showForm && (
         <AddAccountForm
