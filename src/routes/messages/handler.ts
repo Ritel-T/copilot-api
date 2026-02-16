@@ -46,6 +46,7 @@ import {
   translateToOpenAI,
 } from "./non-stream-translation"
 import { translateChunkToAnthropicEvents } from "./stream-translation"
+import { parseSubagentMarkerFromFirstUser } from "./subagent-marker"
 
 const logger = createHandlerLogger("messages-handler")
 
@@ -57,6 +58,12 @@ export async function handleCompletion(c: Context) {
 
   const anthropicPayload = await c.req.json<AnthropicMessagesPayload>()
   logger.debug("Anthropic request payload:", JSON.stringify(anthropicPayload))
+
+  const subagentMarker = parseSubagentMarkerFromFirstUser(anthropicPayload)
+  const initiatorOverride = subagentMarker ? "agent" : undefined
+  if (subagentMarker) {
+    logger.debug("Detected Subagent marker:", JSON.stringify(subagentMarker))
+  }
 
   // claude code and opencode compact request detection
   const isCompact = isCompactRequest(anthropicPayload)
@@ -95,15 +102,16 @@ export async function handleCompletion(c: Context) {
   if (shouldUseMessagesApi(selectedModel)) {
     return await handleWithMessagesApi(c, anthropicPayload, {
       anthropicBetaHeader: anthropicBeta,
+      initiatorOverride,
       selectedModel,
     })
   }
 
   if (shouldUseResponsesApi(selectedModel)) {
-    return await handleWithResponsesApi(c, anthropicPayload)
+    return await handleWithResponsesApi(c, anthropicPayload, initiatorOverride)
   }
 
-  return await handleWithChatCompletions(c, anthropicPayload)
+  return await handleWithChatCompletions(c, anthropicPayload, initiatorOverride)
 }
 
 const RESPONSES_ENDPOINT = "/responses"
@@ -112,6 +120,7 @@ const MESSAGES_ENDPOINT = "/v1/messages"
 const handleWithChatCompletions = async (
   c: Context,
   anthropicPayload: AnthropicMessagesPayload,
+  initiatorOverride?: "agent" | "user",
 ) => {
   const openAIPayload = translateToOpenAI(anthropicPayload)
   logger.debug(
@@ -119,7 +128,9 @@ const handleWithChatCompletions = async (
     JSON.stringify(openAIPayload),
   )
 
-  const response = await createChatCompletions(openAIPayload)
+  const response = await createChatCompletions(openAIPayload, {
+    initiator: initiatorOverride,
+  })
 
   if (isNonStreaming(response)) {
     logger.debug(
@@ -171,6 +182,7 @@ const handleWithChatCompletions = async (
 const handleWithResponsesApi = async (
   c: Context,
   anthropicPayload: AnthropicMessagesPayload,
+  initiatorOverride?: "agent" | "user",
 ) => {
   const responsesPayload =
     translateAnthropicMessagesToResponsesPayload(anthropicPayload)
@@ -182,7 +194,7 @@ const handleWithResponsesApi = async (
   const { vision, initiator } = getResponsesRequestOptions(responsesPayload)
   const response = await createResponses(responsesPayload, {
     vision,
-    initiator,
+    initiator: initiatorOverride ?? initiator,
   })
 
   if (responsesPayload.stream && isAsyncIterable(response)) {
@@ -255,9 +267,14 @@ const handleWithResponsesApi = async (
 const handleWithMessagesApi = async (
   c: Context,
   anthropicPayload: AnthropicMessagesPayload,
-  options?: { anthropicBetaHeader?: string; selectedModel?: Model },
+  options?: {
+    anthropicBetaHeader?: string
+    initiatorOverride?: "agent" | "user"
+    selectedModel?: Model
+  },
 ) => {
-  const { anthropicBetaHeader, selectedModel } = options ?? {}
+  const { anthropicBetaHeader, initiatorOverride, selectedModel } =
+    options ?? {}
   // Pre-request processing: filter thinking blocks for Claude models so only
   // valid thinking blocks are sent to the Copilot Messages API.
   for (const msg of anthropicPayload.messages) {
@@ -285,7 +302,9 @@ const handleWithMessagesApi = async (
 
   logger.debug("Translated Messages payload:", JSON.stringify(anthropicPayload))
 
-  const response = await createMessages(anthropicPayload, anthropicBetaHeader)
+  const response = await createMessages(anthropicPayload, anthropicBetaHeader, {
+    initiator: initiatorOverride,
+  })
 
   if (isAsyncIterable(response)) {
     logger.debug("Streaming response from Copilot (Messages API)")
