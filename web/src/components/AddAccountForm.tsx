@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 
 import { api } from "../api"
+import { useT } from "../i18n"
 
 interface Props {
   onComplete: () => Promise<void>
@@ -16,6 +17,7 @@ function DeviceCodeDisplay({
   userCode: string
   verificationUri: string
 }) {
+  const t = useT()
   return (
     <div style={{ textAlign: "center", padding: "20px 0" }}>
       <p
@@ -25,7 +27,7 @@ function DeviceCodeDisplay({
           marginBottom: 16,
         }}
       >
-        Enter this code on GitHub:
+        {t("enterCode")}
       </p>
       <div
         onClick={() => void navigator.clipboard.writeText(userCode)}
@@ -48,7 +50,7 @@ function DeviceCodeDisplay({
         {userCode}
       </div>
       <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 16 }}>
-        Click the code to copy
+        {t("clickToCopy")}
       </p>
       <a
         href={verificationUri}
@@ -64,7 +66,7 @@ function DeviceCodeDisplay({
           fontSize: 14,
         }}
       >
-        Open GitHub
+        {t("openGithub")}
       </a>
     </div>
   )
@@ -83,10 +85,11 @@ function AuthorizeStep({
   error: string
   onCancel: () => void
 }) {
+  const t = useT()
   return (
     <div>
       <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>
-        GitHub Authorization
+        {t("githubAuth")}
       </h3>
       <DeviceCodeDisplay
         userCode={userCode}
@@ -129,7 +132,7 @@ function AuthorizeStep({
       )}
       <div style={{ display: "flex", justifyContent: "center", marginTop: 8 }}>
         <button type="button" onClick={onCancel}>
-          Cancel
+          {t("cancel")}
         </button>
       </div>
     </div>
@@ -155,31 +158,32 @@ function ConfigForm({
   accountType: string
   setAccountType: (v: string) => void
 }) {
+  const t = useT()
   return (
     <form onSubmit={onSubmit}>
       <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>
-        Add Account
+        {t("addAccountTitle")}
       </h3>
       <div style={{ display: "grid", gap: 12, marginBottom: 12 }}>
         <div>
-          <label htmlFor="acc-name">Account Name</label>
+          <label htmlFor="acc-name">{t("accountName")}</label>
           <input
             id="acc-name"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. Personal"
+            placeholder={t("accountNamePlaceholder")}
           />
         </div>
         <div>
-          <label htmlFor="acc-type">Account Type</label>
+          <label htmlFor="acc-type">{t("accountType")}</label>
           <select
             id="acc-type"
             value={accountType}
             onChange={(e) => setAccountType(e.target.value)}
           >
-            <option value="individual">Individual</option>
-            <option value="business">Business</option>
-            <option value="enterprise">Enterprise</option>
+            <option value="individual">{t("individual")}</option>
+            <option value="business">{t("business")}</option>
+            <option value="enterprise">{t("enterprise")}</option>
           </select>
         </div>
       </div>
@@ -190,10 +194,10 @@ function ConfigForm({
       )}
       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
         <button type="button" onClick={onCancel}>
-          Cancel
+          {t("cancel")}
         </button>
         <button type="submit" className="primary" disabled={loading}>
-          {loading ? "Starting..." : "Login with GitHub"}
+          {loading ? t("starting") : t("loginWithGithub")}
         </button>
       </div>
     </form>
@@ -208,6 +212,7 @@ function useAuthFlow(onComplete: () => Promise<void>) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const t = useT()
 
   const cleanup = useCallback(() => {
     if (pollRef.current) {
@@ -226,7 +231,7 @@ function useAuthFlow(onComplete: () => Promise<void>) {
       setUserCode(result.userCode)
       setVerificationUri(result.verificationUri)
       setStep("authorize")
-      setAuthStatus("Waiting for authorization...")
+      setAuthStatus(t("waitingAuth"))
 
       pollRef.current = setInterval(() => {
         void (async () => {
@@ -234,7 +239,7 @@ function useAuthFlow(onComplete: () => Promise<void>) {
             const poll = await api.pollAuth(result.sessionId)
             if (poll.status === "completed") {
               cleanup()
-              setAuthStatus("Authorized! Creating account...")
+              setAuthStatus(t("authorized"))
               await api.completeAuth({
                 sessionId: result.sessionId,
                 name,
@@ -245,7 +250,7 @@ function useAuthFlow(onComplete: () => Promise<void>) {
             } else if (poll.status === "expired" || poll.status === "error") {
               cleanup()
               setAuthStatus("")
-              setError(poll.error ?? "Authorization failed or expired")
+              setError(poll.error ?? t("authFailed"))
             }
           } catch {
             // poll error, keep trying
@@ -276,11 +281,12 @@ export function AddAccountForm({ onComplete, onCancel }: Props) {
   const [name, setName] = useState("")
   const [accountType, setAccountType] = useState("individual")
   const auth = useAuthFlow(onComplete)
+  const t = useT()
 
   const handleSubmit = (e: React.SyntheticEvent) => {
     e.preventDefault()
     if (!name.trim()) {
-      auth.setError("Account name is required")
+      auth.setError(t("accountNameRequired"))
       return
     }
     void auth.startAuth(name.trim(), accountType)

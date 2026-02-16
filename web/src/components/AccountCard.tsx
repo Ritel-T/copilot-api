@@ -1,6 +1,7 @@
 import { useState } from "react"
 
 import { api, type Account, type UsageData } from "../api"
+import { useT } from "../i18n"
 
 function StatusBadge({ status }: { status: string }) {
   const colorMap: Record<string, string> = {
@@ -86,6 +87,7 @@ function QuotaBar({
 
 function UsagePanel({ usage }: { usage: UsageData }) {
   const q = usage.quota_snapshots
+  const t = useT()
   return (
     <div
       style={{
@@ -98,22 +100,22 @@ function UsagePanel({ usage }: { usage: UsageData }) {
       <div
         style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 8 }}
       >
-        Plan: {usage.copilot_plan} · Resets: {usage.quota_reset_date}
+        {t("plan")} {usage.copilot_plan} · {t("resets")} {usage.quota_reset_date}
       </div>
       <QuotaBar
-        label="Premium"
+        label={t("premium")}
         used={
           q.premium_interactions.entitlement - q.premium_interactions.remaining
         }
         total={q.premium_interactions.entitlement}
       />
       <QuotaBar
-        label="Chat"
+        label={t("chat")}
         used={q.chat.entitlement - q.chat.remaining}
         total={q.chat.entitlement}
       />
       <QuotaBar
-        label="Completions"
+        label={t("completions")}
         used={q.completions.entitlement - q.completions.remaining}
         total={q.completions.entitlement}
       />
@@ -140,6 +142,7 @@ function ApiKeyPanel({
 }) {
   const [visible, setVisible] = useState(false)
   const [copied, copy] = useCopyFeedback()
+  const t = useT()
   const safeKey = apiKey ?? ""
   const masked = safeKey.length > 8 ? `${safeKey.slice(0, 8)}${"•".repeat(24)}` : safeKey
   const isCopied = copied === safeKey
@@ -159,7 +162,7 @@ function ApiKeyPanel({
       }}
     >
       <span style={{ color: "var(--text-muted)", flexShrink: 0 }}>
-        {isCopied ? "Copied!" : "API Key:"}
+        {isCopied ? t("copied") : t("apiKey")}
       </span>
       <span
         onClick={() => copy(safeKey)}
@@ -177,23 +180,17 @@ function ApiKeyPanel({
         onClick={() => setVisible(!visible)}
         style={{ padding: "2px 8px", fontSize: 11 }}
       >
-        {visible ? "Hide" : "Show"}
+        {visible ? t("hide") : t("show")}
       </button>
       <button
         type="button"
         onClick={onRegenerate}
         style={{ padding: "2px 8px", fontSize: 11 }}
       >
-        Regen
+        {t("regen")}
       </button>
     </div>
   )
-}
-
-function getUsageLabel(loading: boolean, visible: boolean): string {
-  if (loading) return "..."
-  if (visible) return "Hide Usage"
-  return "Usage"
 }
 
 interface Props {
@@ -219,6 +216,7 @@ function AccountActions({
 }) {
   const [actionLoading, setActionLoading] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const t = useT()
 
   const handleAction = async (action: () => Promise<unknown>) => {
     setActionLoading(true)
@@ -246,7 +244,7 @@ function AccountActions({
     <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
       {status === "running" && (
         <button onClick={onToggleUsage} disabled={usageLoading}>
-          {getUsageLabel(usageLoading, showUsage)}
+          {usageLoading ? "..." : showUsage ? t("hideUsage") : t("usage")}
         </button>
       )}
       {status === "running" ?
@@ -254,14 +252,14 @@ function AccountActions({
           onClick={() => void handleAction(() => api.stopInstance(account.id))}
           disabled={actionLoading}
         >
-          Stop
+          {t("stop")}
         </button>
       : <button
           className="primary"
           onClick={() => void handleAction(() => api.startInstance(account.id))}
           disabled={actionLoading}
         >
-          {actionLoading ? "Starting..." : "Start"}
+          {actionLoading ? t("starting") : t("start")}
         </button>
       }
       <button
@@ -269,7 +267,7 @@ function AccountActions({
         onClick={() => void handleDelete()}
         disabled={actionLoading}
       >
-        {confirmDelete ? "Confirm?" : "Delete"}
+        {confirmDelete ? t("confirmDelete") : t("delete")}
       </button>
     </div>
   )
@@ -279,6 +277,7 @@ function EndpointsPanel({ apiKey, proxyPort }: { apiKey: string; proxyPort: numb
   const proxyBase = `${window.location.protocol}//${window.location.hostname}:${proxyPort}`
   const safeKey = apiKey ?? "YOUR_API_KEY"
   const [copied, copy] = useCopyFeedback()
+  const t = useT()
 
   const endpoints = [
     { label: "OpenAI", path: "/v1/chat/completions" },
@@ -305,7 +304,7 @@ function EndpointsPanel({ apiKey, proxyPort }: { apiKey: string; proxyPort: numb
           justifyContent: "space-between",
         }}
       >
-        <span>Endpoints (Bearer {safeKey.slice(0, 8)}...)</span>
+        <span>{t("endpoints")} (Bearer {safeKey.slice(0, 8)}...)</span>
         <span style={{ fontFamily: "monospace" }}>{proxyBase}</span>
       </div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
@@ -329,7 +328,7 @@ function EndpointsPanel({ apiKey, proxyPort }: { apiKey: string; proxyPort: numb
               }}
               title={url}
             >
-              {isCopied ? "Copied!" : ep.label}
+              {isCopied ? t("copied") : ep.label}
             </span>
           )
         })}
@@ -347,6 +346,7 @@ export function AccountCard({ account, proxyPort, onRefresh }: Props) {
   const [priorityValue, setPriorityValue] = useState(
     String(account.priority ?? 0),
   )
+  const t = useT()
 
   const handleToggleUsage = async () => {
     if (showUsage) {
@@ -434,7 +434,7 @@ export function AccountCard({ account, proxyPort, onRefresh }: Props) {
           </div>
           {account.error && (
             <div style={{ fontSize: 12, color: "var(--red)", marginTop: 4 }}>
-              Error: {account.error}
+              {t("error")} {account.error}
             </div>
           )}
         </div>
@@ -458,7 +458,7 @@ export function AccountCard({ account, proxyPort, onRefresh }: Props) {
           fontSize: 13,
         }}
       >
-        <span style={{ color: "var(--text-muted)" }}>Priority:</span>
+        <span style={{ color: "var(--text-muted)" }}>{t("priorityLabel")}</span>
         {editingPriority ? (
           <input
             type="number"
@@ -499,7 +499,7 @@ export function AccountCard({ account, proxyPort, onRefresh }: Props) {
           </span>
         )}
         <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
-          Higher value = higher priority
+          {t("priorityHint")}
         </span>
       </div>
 
@@ -517,7 +517,7 @@ export function AccountCard({ account, proxyPort, onRefresh }: Props) {
               color: "var(--text-muted)",
             }}
           >
-            Usage data unavailable. Make sure the instance is running.
+            {t("usageUnavailable")}
           </div>)}
     </div>
   )

@@ -72,6 +72,13 @@ export interface ConfigResponse {
   needsSetup: boolean
 }
 
+export interface BatchUsageItem {
+  accountId: string
+  name: string
+  status: string
+  usage: UsageData | null
+}
+
 interface ErrorBody {
   error?: string
 }
@@ -122,6 +129,8 @@ export const api = {
     request<{ status: string }>(`/accounts/${id}/stop`, { method: "POST" }),
 
   getUsage: (id: string) => request<UsageData>(`/accounts/${id}/usage`),
+
+  getAllUsage: () => request<Array<BatchUsageItem>>("/accounts/usage"),
 
   regenerateKey: (id: string) =>
     request<Account>(`/accounts/${id}/regenerate-key`, { method: "POST" }),

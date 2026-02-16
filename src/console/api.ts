@@ -122,6 +122,36 @@ consoleApi.get("/accounts", async (c) => {
   return c.json(result)
 })
 
+// Batch usage for all running accounts
+consoleApi.get("/accounts/usage", async (c) => {
+  const accounts = await getAccounts()
+  const results = await Promise.all(
+    accounts.map(async (account) => {
+      const status = getInstanceStatus(account.id)
+      if (status !== "running") {
+        return {
+          accountId: account.id,
+          name: account.name,
+          status,
+          usage: null,
+        }
+      }
+      try {
+        const usage = await getInstanceUsage(account.id)
+        return { accountId: account.id, name: account.name, status, usage }
+      } catch {
+        return {
+          accountId: account.id,
+          name: account.name,
+          status,
+          usage: null,
+        }
+      }
+    }),
+  )
+  return c.json(results)
+})
+
 // Get single account
 consoleApi.get("/accounts/:id", async (c) => {
   const account = await getAccount(c.req.param("id"))
