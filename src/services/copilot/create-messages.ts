@@ -16,6 +16,9 @@ export type CreateMessagesReturn = AnthropicResponse | MessagesStream
 export const createMessages = async (
   payload: AnthropicMessagesPayload,
   anthropicBetaHeader?: string,
+  options?: {
+    initiator?: "agent" | "user"
+  },
 ): Promise<CreateMessagesReturn> => {
   if (!state.copilotToken) throw new Error("Copilot token not found")
 
@@ -33,10 +36,11 @@ export const createMessages = async (
         lastMessage.content.some((block) => block.type !== "tool_result")
       : true
   }
+  const initiator = options?.initiator ?? (isInitiateRequest ? "user" : "agent")
 
   const headers: Record<string, string> = {
     ...copilotHeaders(state, enableVision),
-    "X-Initiator": isInitiateRequest ? "user" : "agent",
+    "X-Initiator": initiator,
   }
 
   if (anthropicBetaHeader) {
