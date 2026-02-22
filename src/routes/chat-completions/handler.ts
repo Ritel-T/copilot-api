@@ -13,6 +13,7 @@ import {
   type ChatCompletionResponse,
   type ChatCompletionsPayload,
 } from "~/services/copilot/create-chat-completions"
+import { createResponsesAsCompletions } from "~/services/copilot/create-responses"
 
 export async function handleCompletion(c: Context) {
   await checkRateLimit(state)
@@ -47,7 +48,19 @@ export async function handleCompletion(c: Context) {
     consola.debug("Set max_tokens to:", JSON.stringify(payload.max_tokens))
   }
 
-  const response = await createChatCompletions(payload)
+  // Route to Responses API for models that only support /responses (e.g. gpt-5.x-codex)
+  const needsResponsesApi =
+    selectedModel?.supported_endpoints != null &&
+    !selectedModel.supported_endpoints.includes("/chat/completions") &&
+    selectedModel.supported_endpoints.includes("/responses")
+
+  if (needsResponsesApi) {
+    consola.debug("Routing to Responses API for model:", payload.model)
+  }
+
+  const response = needsResponsesApi
+    ? await createResponsesAsCompletions(payload)
+    : await createChatCompletions(payload)
 
   if (isNonStreaming(response)) {
     consola.debug("Non-streaming response:", JSON.stringify(response))

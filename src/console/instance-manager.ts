@@ -27,6 +27,7 @@ import {
   type ChatCompletionResponse,
   type ChatCompletionsPayload,
 } from "~/services/copilot/create-chat-completions"
+import { createResponsesAsCompletions } from "~/services/copilot/create-responses"
 import { getVSCodeVersion } from "~/services/get-vscode-version"
 
 import type { Account } from "./account-store"
@@ -213,16 +214,37 @@ export async function completionsHandler(
       (c.get("bufferedBody") as CompletionsPayload | undefined)
       ?? (await c.req.json<CompletionsPayload>())
 
+    const selectedModel = st.models?.data.find((m) => m.id === payload.model)
+
+    if (!payload.max_tokens && selectedModel) {
+      payload.max_tokens = selectedModel.capabilities.limits.max_output_tokens
+    }
+
+    // Route to Responses API for models that only support /responses (e.g. gpt-5.x-codex)
+    const needsResponsesApi =
+      selectedModel?.supported_endpoints != null &&
+      !selectedModel.supported_endpoints.includes("/chat/completions") &&
+      selectedModel.supported_endpoints.includes("/responses")
+
+    if (needsResponsesApi) {
+      consola.debug("Routing to Responses API for model:", payload.model)
+      const result = await createResponsesAsCompletions(
+        payload as unknown as ChatCompletionsPayload,
+        st,
+      )
+      if (Object.hasOwn(result, "choices")) {
+        return c.json(result as ChatCompletionResponse)
+      }
+      return streamSSE(c, async (stream) => {
+        for await (const chunk of result as AsyncIterable<{ data: string; event?: string }>) {
+          await stream.writeSSE(chunk)
+        }
+      })
+    }
+
     const headers: Record<string, string> = {
       ...copilotHeaders(st, hasVisionContent(payload.messages)),
       "X-Initiator": isAgentRequest(payload.messages) ? "agent" : "user",
-    }
-
-    if (!payload.max_tokens) {
-      const model = st.models?.data.find((m) => m.id === payload.model)
-      if (model) {
-        payload.max_tokens = model.capabilities.limits.max_output_tokens
-      }
     }
 
     const response = await fetch(`${copilotBaseUrl(st)}/chat/completions`, {
