@@ -176,7 +176,8 @@ async function mountStaticFiles(app: Hono): Promise<void> {
 async function autoStartAccounts(): Promise<void> {
   const accounts = await getAccounts()
   for (const account of accounts) {
-    if (account.enabled) {
+    // Skip accounts that are disabled or were manually stopped
+    if (account.enabled && account.status !== "stopped") {
       try {
         await startInstance(account)
       } catch (error) {

@@ -13,6 +13,9 @@ export interface Account {
   enabled: boolean
   createdAt: string
   priority: number
+  status?: "running" | "stopped" | "error"
+  rateLimitWait?: boolean
+  manualApprove?: boolean
 }
 
 export interface PoolConfig {

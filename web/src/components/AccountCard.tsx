@@ -346,7 +346,23 @@ export function AccountCard({ account, proxyPort, onRefresh }: Props) {
   const [priorityValue, setPriorityValue] = useState(
     String(account.priority ?? 0),
   )
+  const [cachedUsage, setCachedUsage] = useState<{
+    usage: UsageData
+    fetchedAt: string
+  } | null>(null)
   const t = useT()
+
+  // Load cached usage on mount
+  useState(() => {
+    void (async () => {
+      try {
+        const cached = await api.getCachedUsage(account.id)
+        setCachedUsage(cached)
+      } catch {
+        // No cached data
+      }
+    })()
+  })
 
   const handleToggleUsage = async () => {
     if (showUsage) {
@@ -358,6 +374,11 @@ export function AccountCard({ account, proxyPort, onRefresh }: Props) {
       const data = await api.getUsage(account.id)
       setUsage(data)
       setShowUsage(true)
+      // Update cached usage
+      setCachedUsage({
+        usage: data,
+        fetchedAt: new Date().toISOString(),
+      })
     } catch {
       setUsage(null)
       setShowUsage(true)
@@ -396,6 +417,23 @@ export function AccountCard({ account, proxyPort, onRefresh }: Props) {
         }
       })()
     }
+  }
+
+  const handleToggle = (field: "rateLimitWait" | "manualApprove", value: boolean) => {
+    void (async () => {
+      try {
+        await api.updateAccount(account.id, { [field]: value })
+        await onRefresh()
+      } catch (err) {
+        console.error(`${field} update failed:`, err)
+      }
+    })()
+  }
+
+  // Format last query time
+  const formatLastQuery = (isoString: string): string => {
+    const date = new Date(isoString)
+    return date.toLocaleString()
   }
 
   return (
@@ -502,6 +540,73 @@ export function AccountCard({ account, proxyPort, onRefresh }: Props) {
           {t("priorityHint")}
         </span>
       </div>
+
+      {/* Settings toggles */}
+      <div
+        style={{
+          marginTop: 10,
+          display: "flex",
+          gap: 16,
+          fontSize: 13,
+        }}
+      >
+        <label
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            cursor: "pointer",
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={account.rateLimitWait ?? false}
+            onChange={(e) => handleToggle("rateLimitWait", e.target.checked)}
+          />
+          <span style={{ color: "var(--text-muted)" }}>Rate Limit Wait</span>
+        </label>
+        <label
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            cursor: "pointer",
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={account.manualApprove ?? false}
+            onChange={(e) => handleToggle("manualApprove", e.target.checked)}
+          />
+          <span style={{ color: "var(--text-muted)" }}>Manual Approve</span>
+        </label>
+      </div>
+
+      {/* Cached usage display */}
+      {cachedUsage && (
+        <div
+          style={{
+            marginTop: 12,
+            padding: 12,
+            background: "var(--bg)",
+            borderRadius: "var(--radius)",
+          }}
+        >
+          <div
+            style={{
+              fontSize: 12,
+              color: "var(--text-muted)",
+              marginBottom: 8,
+              display: "flex",
+              justifyContent: "space-between",
+            }}
+          >
+            <span>{t("plan")} {cachedUsage.usage.copilot_plan}</span>
+            <span>Last query: {formatLastQuery(cachedUsage.fetchedAt)}</span>
+          </div>
+          <UsagePanel usage={cachedUsage.usage} />
+        </div>
+      )}
 
       <ApiKeyPanel apiKey={account.apiKey} onRegenerate={handleRegenerate} />
       {status === "running" && (

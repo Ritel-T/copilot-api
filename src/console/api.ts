@@ -28,7 +28,7 @@ import {
   startInstance,
   stopInstance,
 } from "./instance-manager"
-
+import { getCachedUsage, setCachedUsage } from "./usage-cache"
 let proxyPort = 4141
 
 export function setProxyPort(port: number): void {
@@ -186,6 +186,9 @@ const UpdateAccountSchema = z.object({
   accountType: z.string().optional(),
   enabled: z.boolean().optional(),
   priority: z.number().int().min(0).optional(),
+  status: z.enum(["running", "stopped", "error"]).optional(),
+  rateLimitWait: z.boolean().optional(),
+  manualApprove: z.boolean().optional(),
 })
 
 // Update account
@@ -236,10 +239,23 @@ consoleApi.post("/accounts/:id/stop", (c) => {
 
 // Get usage for account
 consoleApi.get("/accounts/:id/usage", async (c) => {
-  const usage = await getInstanceUsage(c.req.param("id"))
+  const accountId = c.req.param("id")
+  const usage = await getInstanceUsage(accountId)
   if (!usage)
     return c.json({ error: "Instance not running or usage unavailable" }, 404)
+  // Save to cache
+  await setCachedUsage(accountId, usage)
   return c.json(usage)
+})
+
+// Get cached usage for account (returns cached data even if instance is stopped)
+consoleApi.get("/accounts/:id/usage/cached", async (c) => {
+  const accountId = c.req.param("id")
+  const cached = await getCachedUsage(accountId)
+  if (!cached) {
+    return c.json({ error: "No cached usage available" }, 404)
+  }
+  return c.json(cached)
 })
 
 // === Device Code Auth Flow ===

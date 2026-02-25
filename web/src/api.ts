@@ -30,6 +30,8 @@ export interface Account {
   status?: "running" | "stopped" | "error"
   error?: string
   user?: { login: string } | null
+  rateLimitWait?: boolean
+  manualApprove?: boolean
 }
 
 export interface UsageData {
@@ -40,6 +42,11 @@ export interface UsageData {
     chat: QuotaDetail
     completions: QuotaDetail
   }
+}
+
+export interface CachedUsageResponse {
+  usage: UsageData
+  fetchedAt: string
 }
 
 interface QuotaDetail {
@@ -129,6 +136,9 @@ export const api = {
     request<{ status: string }>(`/accounts/${id}/stop`, { method: "POST" }),
 
   getUsage: (id: string) => request<UsageData>(`/accounts/${id}/usage`),
+
+  getCachedUsage: (id: string) =>
+    request<CachedUsageResponse>(`/accounts/${id}/usage/cached`),
 
   getAllUsage: () => request<Array<BatchUsageItem>>("/accounts/usage"),
 

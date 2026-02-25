@@ -32,6 +32,8 @@ import { getVSCodeVersion } from "~/services/get-vscode-version"
 
 import type { Account } from "./account-store"
 
+import { updateAccount } from "./account-store"
+
 interface ProxyInstance {
   account: Account
   state: State
@@ -46,8 +48,8 @@ function createState(account: Account): State {
   return {
     accountType: account.accountType,
     githubToken: account.githubToken,
-    manualApprove: false,
-    rateLimitWait: false,
+    manualApprove: account.manualApprove ?? false,
+    rateLimitWait: account.rateLimitWait ?? false,
     showToken: false,
   }
 }
@@ -112,11 +114,23 @@ export async function startInstance(account: Account): Promise<void> {
     instance.status = "running"
     instances.set(account.id, instance)
     consola.success(`[${account.name}] Instance ready`)
+    // Persist status to account store
+    try {
+      await updateAccount(account.id, { status: "running" })
+    } catch {
+      // Ignore persistence errors
+    }
   } catch (error) {
     instance.status = "error"
     instance.error = (error as Error).message
     instances.set(account.id, instance)
     consola.error(`[${account.name}] Failed to start:`, error)
+    // Persist error status
+    try {
+      await updateAccount(account.id, { status: "error" })
+    } catch {
+      // Ignore persistence errors
+    }
     throw error
   }
 }
@@ -128,6 +142,14 @@ export function stopInstance(accountId: string): void {
     if (instance.tokenInterval) clearInterval(instance.tokenInterval)
     instance.status = "stopped"
     consola.info(`[${instance.account.name}] Instance stopped`)
+    // Persist status to account store
+    void (async () => {
+      try {
+        await updateAccount(accountId, { status: "stopped" })
+      } catch {
+        // Ignore persistence errors
+      }
+    })()
   } catch (error) {
     consola.error(`[${instance.account.name}] Error stopping:`, error)
   }
