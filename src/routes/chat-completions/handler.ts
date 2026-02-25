@@ -50,16 +50,17 @@ export async function handleCompletion(c: Context) {
 
   // Route to Responses API for models that only support /responses (e.g. gpt-5.x-codex)
   const needsResponsesApi =
-    selectedModel?.supported_endpoints != null &&
-    !selectedModel.supported_endpoints.includes("/chat/completions") &&
-    selectedModel.supported_endpoints.includes("/responses")
+    selectedModel?.supported_endpoints
+    && !selectedModel.supported_endpoints.includes("/chat/completions")
+    && selectedModel.supported_endpoints.includes("/responses")
 
   if (needsResponsesApi) {
     consola.debug("Routing to Responses API for model:", payload.model)
   }
 
-  const response = needsResponsesApi
-    ? await createResponsesAsCompletions(payload)
+  const response =
+    needsResponsesApi ?
+      await createResponsesAsCompletions(payload)
     : await createChatCompletions(payload)
 
   if (isNonStreaming(response)) {

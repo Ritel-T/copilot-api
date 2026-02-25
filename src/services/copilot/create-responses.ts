@@ -1,13 +1,14 @@
-import { randomUUID } from "node:crypto"
+import type { SSEMessage } from "hono/streaming"
 
 import consola from "consola"
 import { events } from "fetch-event-stream"
-import type { SSEMessage } from "hono/streaming"
+import { randomUUID } from "node:crypto"
+
+import type { State } from "~/lib/state"
 
 import { copilotBaseUrl, copilotHeaders } from "~/lib/api-config"
 import { HTTPError } from "~/lib/error"
 import { state as globalState } from "~/lib/state"
-import type { State } from "~/lib/state"
 
 import type {
   ChatCompletionChunk,
@@ -390,7 +391,7 @@ export const createResponsesAsCompletions = async (
   const activeState = st ?? globalState
   if (!activeState.copilotToken) throw new Error("Copilot token not found")
 
-  const responseId = `chatcmpl-${randomUUID().replace(/-/g, "").slice(0, 10)}`
+  const responseId = `chatcmpl-${randomUUID().replaceAll("-", "").slice(0, 10)}`
   const created = Math.floor(Date.now() / 1000)
 
   // --- translate request ---
@@ -399,9 +400,11 @@ export const createResponsesAsCompletions = async (
     input: payload.messages,
     stream: payload.stream ?? false,
   }
-  if (payload.max_tokens != null) requestBody.max_output_tokens = payload.max_tokens
-  if (payload.temperature != null) requestBody.temperature = payload.temperature
-  if (payload.top_p != null) requestBody.top_p = payload.top_p
+  if (payload.max_tokens !== null)
+    requestBody.max_output_tokens = payload.max_tokens
+  if (payload.temperature !== null)
+    requestBody.temperature = payload.temperature
+  if (payload.top_p !== null) requestBody.top_p = payload.top_p
   if (payload.tools?.length) {
     // Responses API tool format is flat (no nested "function" wrapper)
     requestBody.tools = payload.tools.map((t) => ({
@@ -411,12 +414,13 @@ export const createResponsesAsCompletions = async (
       parameters: t.function.parameters,
     }))
   }
-  if (payload.tool_choice != null) requestBody.tool_choice = payload.tool_choice
+  if (payload.tool_choice !== null)
+    requestBody.tool_choice = payload.tool_choice
 
   const enableVision = payload.messages.some(
     (x) =>
-      typeof x.content !== "string" &&
-      x.content?.some((x) => x.type === "image_url"),
+      typeof x.content !== "string"
+      && x.content?.some((x) => x.type === "image_url"),
   )
   const isAgentCall = payload.messages.some((msg) =>
     ["assistant", "tool"].includes(msg.role),
@@ -438,7 +442,11 @@ export const createResponsesAsCompletions = async (
   }
 
   if (payload.stream) {
-    return translateStream(response, responseId, created, payload.model)
+    return translateStream(response, {
+      responseId,
+      created,
+      model: payload.model,
+    })
   }
 
   const data = (await response.json()) as ResponsesResult
@@ -447,11 +455,120 @@ export const createResponsesAsCompletions = async (
 
 // ─── streaming translation ────────────────────────────────────────────────────
 
+interface StreamContext {
+  responseId: string
+  created: number
+  model: string
+}
+
+function buildTextDeltaChunk(
+  ctx: StreamContext,
+  delta: string,
+): ChatCompletionChunk {
+  return {
+    id: ctx.responseId,
+    object: "chat.completion.chunk",
+    created: ctx.created,
+    model: ctx.model,
+    choices: [
+      {
+        index: 0,
+        delta: { content: delta },
+        finish_reason: null,
+        logprobs: null,
+      },
+    ],
+  }
+}
+
+function buildToolArgsDeltaChunk(
+  ctx: StreamContext,
+  ev: { delta: string; call_id: string; output_index: number },
+): ChatCompletionChunk {
+  return {
+    id: ctx.responseId,
+    object: "chat.completion.chunk",
+    created: ctx.created,
+    model: ctx.model,
+    choices: [
+      {
+        index: 0,
+        delta: {
+          tool_calls: [
+            {
+              index: ev.output_index,
+              function: { name: "", arguments: ev.delta },
+            },
+          ],
+        },
+        finish_reason: null,
+        logprobs: null,
+      },
+    ],
+  }
+}
+
+function buildToolStartChunk(
+  ctx: StreamContext,
+  item: ResponseOutputFunctionCall,
+  outputIndex: number,
+): ChatCompletionChunk {
+  return {
+    id: ctx.responseId,
+    object: "chat.completion.chunk",
+    created: ctx.created,
+    model: ctx.model,
+    choices: [
+      {
+        index: 0,
+        delta: {
+          tool_calls: [
+            {
+              index: outputIndex,
+              id: `call_${randomUUID().replaceAll("-", "").slice(0, 10)}`,
+              type: "function",
+              function: { name: item.name, arguments: "" },
+            },
+          ],
+        },
+        finish_reason: null,
+        logprobs: null,
+      },
+    ],
+  }
+}
+
+function buildCompletedChunk(
+  ctx: StreamContext,
+  hasToolCalls: boolean,
+  usage?: ResponseUsage,
+): ChatCompletionChunk {
+  return {
+    id: ctx.responseId,
+    object: "chat.completion.chunk",
+    created: ctx.created,
+    model: ctx.model,
+    choices: [
+      {
+        index: 0,
+        delta: {},
+        finish_reason: hasToolCalls ? "tool_calls" : "stop",
+        logprobs: null,
+      },
+    ],
+    ...(usage && {
+      usage: {
+        prompt_tokens: usage.input_tokens,
+        completion_tokens: usage.output_tokens,
+        total_tokens: usage.total_tokens,
+      },
+    }),
+  }
+}
+
 async function* translateStream(
   response: Response,
-  responseId: string,
-  created: number,
-  model: string,
+  ctx: StreamContext,
 ): AsyncIterable<SSEMessage> {
   for await (const event of events(response)) {
     if (!event.data || event.data === "[DONE]") continue
@@ -465,107 +582,50 @@ async function* translateStream(
 
     const eventType = event.event
 
-    if (eventType === "response.output_text.delta") {
-      const delta = (data as { delta: string }).delta
-      const chunk: ChatCompletionChunk = {
-        id: responseId,
-        object: "chat.completion.chunk",
-        created,
-        model,
-        choices: [
-          {
-            index: 0,
-            delta: { content: delta },
-            finish_reason: null,
-            logprobs: null,
-          },
-        ],
+    switch (eventType) {
+      case "response.output_text.delta": {
+        const delta = (data as { delta: string }).delta
+        yield { data: JSON.stringify(buildTextDeltaChunk(ctx, delta)) }
+
+        break
       }
-      yield { data: JSON.stringify(chunk) }
-    } else if (eventType === "response.function_call_arguments.delta") {
-      // Tool call argument streaming
-      const ev = data as { delta: string; call_id: string; output_index: number }
-      const chunk: ChatCompletionChunk = {
-        id: responseId,
-        object: "chat.completion.chunk",
-        created,
-        model,
-        choices: [
-          {
-            index: 0,
-            delta: {
-              tool_calls: [
-                {
-                  index: ev.output_index ?? 0,
-                  function: { name: "", arguments: ev.delta },
-                },
-              ],
-            },
-            finish_reason: null,
-            logprobs: null,
-          },
-        ],
-      }
-      yield { data: JSON.stringify(chunk) }
-    } else if (eventType === "response.output_item.added") {
-      // Signal start of a tool call: emit the function name
-      const item = (data as { item: ResponseOutputItem }).item
-      if (item?.type === "function_call") {
-        const chunk: ChatCompletionChunk = {
-          id: responseId,
-          object: "chat.completion.chunk",
-          created,
-          model,
-          choices: [
-            {
-              index: 0,
-              delta: {
-                tool_calls: [
-                  {
-                    index: data.output_index as number ?? 0,
-                    id: `call_${randomUUID().replace(/-/g, "").slice(0, 10)}`,
-                    type: "function",
-                    function: { name: item.name ?? "", arguments: "" },
-                  },
-                ],
-              },
-              finish_reason: null,
-              logprobs: null,
-            },
-          ],
+      case "response.function_call_arguments.delta": {
+        const ev = data as {
+          delta: string
+          call_id: string
+          output_index: number
         }
-        yield { data: JSON.stringify(chunk) }
+        yield { data: JSON.stringify(buildToolArgsDeltaChunk(ctx, ev)) }
+
+        break
       }
-    } else if (eventType === "response.completed") {
-      const completed = data as { response: ResponsesResult }
-      const usage = completed.response?.usage
-      // Check if response ended due to tool calls
-      const hasToolCalls = completed.response?.output?.some(
-        (item) => item.type === "function_call",
-      )
-      const chunk: ChatCompletionChunk = {
-        id: responseId,
-        object: "chat.completion.chunk",
-        created,
-        model,
-        choices: [
-          {
-            index: 0,
-            delta: {},
-            finish_reason: hasToolCalls ? "tool_calls" : "stop",
-            logprobs: null,
-          },
-        ],
-        ...(usage && {
-          usage: {
-            prompt_tokens: usage.input_tokens,
-            completion_tokens: usage.output_tokens,
-            total_tokens: usage.total_tokens,
-          },
-        }),
+      case "response.output_item.added": {
+        const item = (data as { item: ResponseOutputItem }).item
+        if (item.type === "function_call") {
+          const chunk = buildToolStartChunk(
+            ctx,
+            item,
+            data.output_index as number,
+          )
+          yield { data: JSON.stringify(chunk) }
+        }
+
+        break
       }
-      yield { data: JSON.stringify(chunk) }
-      yield { data: "[DONE]" }
+      case "response.completed": {
+        const completed = data as { response: ResponsesResult }
+        const usage = completed.response.usage
+        const hasToolCalls = completed.response.output.some(
+          (item) => item.type === "function_call",
+        )
+        yield {
+          data: JSON.stringify(buildCompletedChunk(ctx, hasToolCalls, usage)),
+        }
+        yield { data: "[DONE]" }
+
+        break
+      }
+      // No default
     }
   }
 }
@@ -584,20 +644,20 @@ function translateNonStreaming(
     function: { name: string; arguments: string }
   }> = []
 
-  for (const item of data.output ?? []) {
+  for (const item of data.output) {
     if (item.type === "message") {
       for (const part of item.content ?? []) {
         if (part.type === "output_text") {
-          content += part.text
+          content += (part as ResponseOutputText).text
         }
       }
     } else if (item.type === "function_call") {
       toolCalls.push({
-        id: `call_${randomUUID().replace(/-/g, "").slice(0, 10)}`,
+        id: `call_${randomUUID().replaceAll("-", "").slice(0, 10)}`,
         type: "function",
         function: {
-          name: item.name ?? "",
-          arguments: item.arguments ?? "{}",
+          name: item.name,
+          arguments: item.arguments,
         },
       })
     }
