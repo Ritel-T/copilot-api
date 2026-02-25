@@ -1,11 +1,6 @@
 services:
   copilot-api:
-    image: copilot-api
-    ports:
-      - "3000:3000"
-      - "4141:4141"
-    volumes:
-      - copilot-api-data:/root/.local/share/copilot-api
+    image: ghcr.io/ritel-t/copilot-api:latest
     restart: unless-stopped
 
 volumes:
