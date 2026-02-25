@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react"
 import { api, getSessionToken, setSessionToken, type Account, type BatchUsageItem, type PoolConfig } from "./api"
 import { AccountCard } from "./components/AccountCard"
 import { AddAccountForm } from "./components/AddAccountForm"
+import { RequestLogPanel } from "./components/RequestLogPanel"
 import { useLocale, useT } from "./i18n"
 
 type AuthState = "loading" | "setup" | "login" | "authed"
@@ -599,6 +600,8 @@ function Dashboard() {
       <PoolSettings pool={pool} proxyPort={proxyPort} onChange={setPool} />
 
       <BatchUsagePanel />
+
+      <RequestLogPanel accounts={accounts} />
 
       {showForm && (
         <AddAccountForm

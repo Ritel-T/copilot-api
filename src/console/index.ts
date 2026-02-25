@@ -8,6 +8,7 @@ import path from "node:path"
 import { serve, type ServerHandler } from "srvx"
 
 import { ensurePaths } from "~/lib/paths"
+import { appendLogEntry, cleanupOldLogs } from "~/lib/request-log"
 
 import { getAccountByApiKey, getAccounts, getPoolConfig } from "./account-store"
 import { consoleApi, setProxyPort } from "./api"
@@ -32,6 +33,8 @@ const MIME_TYPES: Record<string, string> = {
   ".ico": "image/x-icon",
 }
 
+// Cleanup old logs on module load
+cleanupOldLogs()
 export const console_ = defineCommand({
   meta: {
     name: "console",
@@ -203,6 +206,8 @@ async function proxyAuth(
         return c.json({ error: "Account instance not running" }, 503)
       }
       c.set("proxyState", st)
+      c.set("proxyAccountId", account.id)
+      c.set("proxyAccountName", account.name)
       await next()
       return
     }
@@ -222,7 +227,8 @@ async function proxyAuth(
   c.set("proxyState", result.state)
   c.set("poolMode", true)
   c.set("poolStrategy", poolConfig.strategy)
-  c.set("poolAccountId", result.account.id)
+  c.set("proxyAccountId", result.account.id)
+  c.set("proxyAccountName", result.account.name)
   await next()
 }
 
@@ -240,8 +246,17 @@ async function withPoolRetry(
   handler: Handler,
 ): Promise<Response> {
   const isPool = c.get("poolMode") as boolean | undefined
+  const startTime = Date.now()
+
+  // For non-pool mode, buffer body, run handler, and log
   if (!isPool) {
-    return handler(c, getState(c))
+    // Buffer the body for logging
+    const body: unknown = await c.req.json()
+    c.set("bufferedBody", body)
+
+    const response = await handler(c, getState(c))
+    logRequest(c, response, startTime)
+    return response
   }
 
   // Buffer the body for potential retries
@@ -254,27 +269,58 @@ async function withPoolRetry(
   // First attempt with the account already selected by proxyAuth
   const firstResponse = await handler(c, getState(c))
   if (!isRetryableStatus(firstResponse.status)) {
+    logRequest(c, firstResponse, startTime)
     return firstResponse
   }
 
   // Add the first account to exclude list and retry with others
-  exclude.add(c.get("poolAccountId") as string)
+  exclude.add(c.get("proxyAccountId") as string)
 
   while (true) {
     const next = await selectAccount(strategy, exclude)
     if (!next) {
       // No more accounts to try, return the last error response
+      logRequest(c, firstResponse, startTime)
       return firstResponse
     }
 
     exclude.add(next.account.id)
+    // Update context with new account for logging
+    c.set("proxyAccountId", next.account.id)
+    c.set("proxyAccountName", next.account.name)
     c.set("proxyState", next.state)
 
     const retryResponse = await handler(c, next.state)
     if (!isRetryableStatus(retryResponse.status)) {
+      logRequest(c, retryResponse, startTime)
       return retryResponse
     }
   }
+}
+
+function logRequest(
+  c: import("hono").Context,
+  response: Response,
+  startTime: number,
+): void {
+  const body = c.get("bufferedBody") as
+    | { model?: string; stream?: boolean }
+    | undefined
+
+  appendLogEntry({
+    timestamp: new Date().toISOString(),
+    accountId: c.get("proxyAccountId") as string,
+    accountName: c.get("proxyAccountName") as string,
+    model: body?.model ?? "unknown",
+    endpoint: c.req.path,
+    success: response.status < 400,
+    statusCode: response.status,
+    latencyMs: Date.now() - startTime,
+    isStreaming: body?.stream ?? false,
+    poolMode: c.get("poolMode") as boolean | undefined,
+    inputTokens: null,
+    outputTokens: null,
+  })
 }
 
 function isRetryableStatus(status: number): boolean {

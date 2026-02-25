@@ -86,6 +86,22 @@ export interface BatchUsageItem {
   usage: UsageData | null
 }
 
+export interface LogEntry {
+  timestamp: string
+  accountId: string
+  accountName: string
+  model: string
+  endpoint: string
+  success: boolean
+  statusCode?: number
+  errorMessage?: string
+  latencyMs?: number
+  isStreaming?: boolean
+  poolMode?: boolean
+  inputTokens?: number | null
+  outputTokens?: number | null
+}
+
 interface ErrorBody {
   error?: string
 }
@@ -177,4 +193,13 @@ export const api = {
 
   regeneratePoolKey: () =>
     request<PoolConfig>("/pool/regenerate-key", { method: "POST" }),
+
+  getLogs: (params?: { account?: string; status?: "success" | "error"; limit?: number }) => {
+    const searchParams = new URLSearchParams()
+    if (params?.account) searchParams.set("account", params.account)
+    if (params?.status) searchParams.set("status", params.status)
+    if (params?.limit) searchParams.set("limit", params.limit.toString())
+    const query = searchParams.toString()
+    return request<Array<LogEntry>>(`/logs${query ? `?${query}` : ""}`)
+  },
 }

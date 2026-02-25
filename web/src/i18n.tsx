@@ -101,6 +101,20 @@ const en = {
   colResets: "Resets",
   totalSummary: "Total",
   noRunningAccounts: "No running accounts",
+
+  // Request Logs
+  logs: "Request Logs",
+  showLogs: "Show Logs",
+  hideLogs: "Hide Logs",
+  colTimestamp: "Time",
+  colEndpoint: "Endpoint",
+  colLatency: "Latency",
+  filterByAccount: "Filter by account",
+  filterByStatus: "Filter by status",
+  allAccounts: "All accounts",
+  successOnly: "Success only",
+  errorOnly: "Error only",
+  noLogs: "No logs yet",
 } as const
 
 export type TranslationKey = keyof typeof en
@@ -203,6 +217,20 @@ const zh: Translations = {
   colResets: "重置日期",
   totalSummary: "合计",
   noRunningAccounts: "暂无运行中的账户",
+
+  // Request Logs
+  logs: "请求日志",
+  showLogs: "显示日志",
+  hideLogs: "隐藏日志",
+  colTimestamp: "时间",
+  colEndpoint: "端点",
+  colLatency: "耗时",
+  filterByAccount: "按账户筛选",
+  filterByStatus: "按状态筛选",
+  allAccounts: "所有账户",
+  successOnly: "仅成功",
+  errorOnly: "仅失败",
+  noLogs: "暂无日志",
 } as const
 
 interface I18nContextValue {

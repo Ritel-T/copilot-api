@@ -2,6 +2,8 @@ import { Hono } from "hono"
 import { cors } from "hono/cors"
 import { z } from "zod"
 
+import { readLogs } from "~/lib/request-log"
+
 import {
   addAccount,
   deleteAccount,
@@ -335,4 +337,20 @@ consoleApi.put("/pool", async (c) => {
 consoleApi.post("/pool/regenerate-key", async (c) => {
   const config = await regeneratePoolApiKey()
   return c.json(config)
+})
+
+// Get request logs
+consoleApi.get("/logs", async (c) => {
+  const account = c.req.query("account")
+  const status = c.req.query("status") as "success" | "error" | undefined
+  const limitQuery = c.req.query("limit")
+  const limit = limitQuery ? Number.parseInt(limitQuery, 10) : 100
+
+  const logs = await readLogs({
+    accountId: account,
+    status,
+    limit,
+  })
+
+  return c.json(logs)
 })

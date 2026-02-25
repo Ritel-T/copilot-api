@@ -11,14 +11,14 @@ export const PATHS = {
   APP_DIR,
   GITHUB_TOKEN_PATH,
   CONFIG_PATH,
-  USAGE_CACHE_PATH: path.join(APP_DIR, "usage-cache.json"),
+  REQUEST_LOG_DIR: path.join(APP_DIR, "logs"),
 }
 
 export async function ensurePaths(): Promise<void> {
   await fs.mkdir(PATHS.APP_DIR, { recursive: true })
   await ensureFile(PATHS.GITHUB_TOKEN_PATH)
   await ensureFile(PATHS.CONFIG_PATH)
-  await ensureFile(PATHS.USAGE_CACHE_PATH)
+  await fs.mkdir(PATHS.REQUEST_LOG_DIR, { recursive: true })
 }
 
 async function ensureFile(filePath: string): Promise<void> {
