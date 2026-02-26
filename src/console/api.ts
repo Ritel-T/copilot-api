@@ -321,7 +321,7 @@ consoleApi.get("/pool", async (c) => {
 
 const UpdatePoolSchema = z.object({
   enabled: z.boolean().optional(),
-  strategy: z.enum(["round-robin", "priority"]).optional(),
+  strategy: z.enum(["round-robin", "priority", "quota"]).optional(),
 })
 
 consoleApi.put("/pool", async (c) => {

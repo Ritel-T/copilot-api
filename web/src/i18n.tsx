@@ -45,6 +45,8 @@ const en = {
   priority: "Priority",
   roundRobinDesc: "Evenly distribute across accounts",
   priorityDesc: "Prefer higher-priority accounts first",
+  quota: "Quota",
+  quotaDesc: "Select account with most remaining quota",
   poolKey: "Pool Key:",
   baseUrl: "Base URL:",
 
@@ -161,6 +163,8 @@ const zh: Translations = {
   priority: "优先级",
   roundRobinDesc: "均匀分配到各账户",
   priorityDesc: "优先使用高优先级账户",
+  quota: "配额",
+  quotaDesc: "选择配额余额最多的账户",
   poolKey: "池密钥：",
   baseUrl: "基础 URL：",
 

@@ -57,7 +57,7 @@ interface QuotaDetail {
 
 export interface PoolConfig {
   enabled: boolean
-  strategy: "round-robin" | "priority"
+  strategy: "round-robin" | "priority" | "quota"
   apiKey: string
 }
 

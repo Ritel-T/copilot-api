@@ -194,7 +194,11 @@ function AccountList({
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+    <div style={{
+      display: "grid",
+      gridTemplateColumns: "repeat(auto-fill, minmax(480px, 1fr))",
+      gap: 16,
+    }}>
       {accounts.map((account) => (
         <AccountCard
           key={account.id}
@@ -300,8 +304,8 @@ function PoolSettings({
       </div>
       {pool.enabled && (
         <>
-          <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
-            {(["round-robin", "priority"] as const).map((s) => (
+          <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {(["round-robin", "priority", "quota"] as const).map((s) => (
               <button
                 key={s}
                 className={pool.strategy === s ? "primary" : undefined}
@@ -309,7 +313,7 @@ function PoolSettings({
                 disabled={saving || pool.strategy === s}
                 style={{ fontSize: 13 }}
               >
-                {s === "round-robin" ? t("roundRobin") : t("priority")}
+                {s === "round-robin" ? t("roundRobin") : s === "priority" ? t("priority") : t("quota")}
               </button>
             ))}
             <span
@@ -322,7 +326,9 @@ function PoolSettings({
             >
               {pool.strategy === "round-robin"
                 ? t("roundRobinDesc")
-                : t("priorityDesc")}
+                : pool.strategy === "priority"
+                  ? t("priorityDesc")
+                  : t("quotaDesc")}
             </span>
           </div>
           <div

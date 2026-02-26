@@ -273,69 +273,6 @@ function AccountActions({
   )
 }
 
-function EndpointsPanel({ apiKey, proxyPort }: { apiKey: string; proxyPort: number }) {
-  const proxyBase = `${window.location.protocol}//${window.location.hostname}:${proxyPort}`
-  const safeKey = apiKey ?? "YOUR_API_KEY"
-  const [copied, copy] = useCopyFeedback()
-  const t = useT()
-
-  const endpoints = [
-    { label: "OpenAI", path: "/v1/chat/completions" },
-    { label: "Anthropic", path: "/v1/messages" },
-    { label: "Models", path: "/v1/models" },
-    { label: "Embeddings", path: "/v1/embeddings" },
-  ]
-
-  return (
-    <div
-      style={{
-        marginTop: 12,
-        padding: 10,
-        background: "var(--bg)",
-        borderRadius: "var(--radius)",
-        fontSize: 12,
-      }}
-    >
-      <div
-        style={{
-          color: "var(--text-muted)",
-          marginBottom: 6,
-          display: "flex",
-          justifyContent: "space-between",
-        }}
-      >
-        <span>{t("endpoints")} (Bearer {safeKey.slice(0, 8)}...)</span>
-        <span style={{ fontFamily: "monospace" }}>{proxyBase}</span>
-      </div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-        {endpoints.map((ep) => {
-          const url = `${proxyBase}${ep.path}`
-          const isCopied = copied === url
-          return (
-            <span
-              key={ep.label}
-              onClick={() => copy(url)}
-              style={{
-                padding: "2px 8px",
-                background: isCopied ? "var(--green)" : "var(--bg-card)",
-                color: isCopied ? "#fff" : undefined,
-                border: `1px solid ${isCopied ? "var(--green)" : "var(--border)"}`,
-                borderRadius: 4,
-                fontFamily: "monospace",
-                cursor: "pointer",
-                fontSize: 11,
-                transition: "all 0.2s",
-              }}
-              title={url}
-            >
-              {isCopied ? t("copied") : ep.label}
-            </span>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
 
 export function AccountCard({ account, proxyPort, onRefresh }: Props) {
   const status = account.status ?? "stopped"
@@ -554,30 +491,36 @@ export function AccountCard({ account, proxyPort, onRefresh }: Props) {
           style={{
             display: "flex",
             alignItems: "center",
-            gap: 6,
+            gap: 8,
             cursor: "pointer",
           }}
         >
-          <input
-            type="checkbox"
-            checked={account.rateLimitWait ?? false}
-            onChange={(e) => handleToggle("rateLimitWait", e.target.checked)}
-          />
+          <span className="toggle-switch">
+            <input
+              type="checkbox"
+              checked={account.rateLimitWait ?? false}
+              onChange={(e) => handleToggle("rateLimitWait", e.target.checked)}
+            />
+            <span className="toggle-slider" />
+          </span>
           <span style={{ color: "var(--text-muted)" }}>Rate Limit Wait</span>
         </label>
         <label
           style={{
             display: "flex",
             alignItems: "center",
-            gap: 6,
+            gap: 8,
             cursor: "pointer",
           }}
         >
-          <input
-            type="checkbox"
-            checked={account.manualApprove ?? false}
-            onChange={(e) => handleToggle("manualApprove", e.target.checked)}
-          />
+          <span className="toggle-switch">
+            <input
+              type="checkbox"
+              checked={account.manualApprove ?? false}
+              onChange={(e) => handleToggle("manualApprove", e.target.checked)}
+            />
+            <span className="toggle-slider" />
+          </span>
           <span style={{ color: "var(--text-muted)" }}>Manual Approve</span>
         </label>
       </div>
@@ -607,23 +550,6 @@ export function AccountCard({ account, proxyPort, onRefresh }: Props) {
           <UsagePanel usage={cachedUsage.usage} />
         </div>
       )}
-
       <ApiKeyPanel apiKey={account.apiKey} onRegenerate={handleRegenerate} />
-      {status === "running" && (
-        <EndpointsPanel apiKey={account.apiKey} proxyPort={proxyPort} />
-      )}
-      {showUsage
-        && (usage ?
-          <UsagePanel usage={usage} />
-        : <div
-            style={{
-              marginTop: 12,
-              fontSize: 13,
-              color: "var(--text-muted)",
-            }}
-          >
-            {t("usageUnavailable")}
+      {showUsage && (usage ? <UsagePanel usage={usage} /> : <div style={{ marginTop: 12, fontSize: 13, color: "var(--text-muted)" }}>{t("usageUnavailable")}</div>)}
           </div>)}
-    </div>
-  )
-}
