@@ -4,30 +4,14 @@ import { api, type Account, type UsageData } from "../api"
 import { useT } from "../i18n"
 
 function StatusBadge({ status }: { status: string }) {
-  const colorMap: Record<string, string> = {
-    running: "var(--green)",
-    stopped: "var(--text-muted)",
-    error: "var(--red)",
+  const badgeClassMap: Record<string, string> = {
+    running: "badge-green",
+    stopped: "badge-neutral",
+    error: "badge-red",
   }
-  const color = colorMap[status] ?? "var(--text-muted)"
+  const badgeClass = badgeClassMap[status] ?? "badge-neutral"
   return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 6,
-        fontSize: 13,
-        color,
-      }}
-    >
-      <span
-        style={{
-          width: 8,
-          height: 8,
-          borderRadius: "50%",
-          background: color,
-        }}
-      />
+    <span className={`badge ${badgeClass}`}>
       {status}
     </span>
   )
@@ -48,7 +32,7 @@ function QuotaBar({
   else if (pct > 70) color = "var(--yellow)"
 
   return (
-    <div style={{ marginBottom: 8 }}>
+    <div style={{ marginBottom: "var(--space-sm)" }}>
       <div
         style={{
           display: "flex",
@@ -59,7 +43,7 @@ function QuotaBar({
         }}
       >
         <span>{label}</span>
-        <span>
+        <span className="text-mono">
           {used} / {total} ({pct.toFixed(1)}%)
         </span>
       </div>
@@ -77,7 +61,7 @@ function QuotaBar({
             width: `${Math.min(pct, 100)}%`,
             background: color,
             borderRadius: 3,
-            transition: "width 0.3s",
+            transition: "width 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
           }}
         />
       </div>
@@ -90,17 +74,17 @@ function UsagePanel({ usage }: { usage: UsageData }) {
   const t = useT()
   return (
     <div
+      className="glass-panel"
       style={{
-        marginTop: 12,
-        padding: 12,
-        background: "var(--bg)",
+        marginTop: "var(--space-md)",
+        padding: "var(--space-md)",
         borderRadius: "var(--radius)",
       }}
     >
       <div
-        style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 8 }}
+        style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: "var(--space-sm)" }}
       >
-        {t("plan")} {usage.copilot_plan} · {t("resets")} {usage.quota_reset_date}
+        {t("plan")} <span className="text-mono">{usage.copilot_plan}</span> · {t("resets")} <span className="text-mono">{usage.quota_reset_date}</span>
       </div>
       <QuotaBar
         label={t("premium")}
@@ -149,27 +133,27 @@ function ApiKeyPanel({
 
   return (
     <div
+      className="glass-panel"
       style={{
-        marginTop: 12,
-        padding: 10,
-        background: "var(--bg)",
+        marginTop: "var(--space-md)",
+        padding: "var(--space-sm) var(--space-md)",
         borderRadius: "var(--radius)",
-        fontSize: 12,
-        fontFamily: "monospace",
+        fontSize: 13,
         display: "flex",
         alignItems: "center",
-        gap: 8,
+        gap: "var(--space-sm)",
       }}
     >
       <span style={{ color: "var(--text-muted)", flexShrink: 0 }}>
         {isCopied ? t("copied") : t("apiKey")}
       </span>
       <span
+        className="text-mono"
         onClick={() => copy(safeKey)}
         style={{
           cursor: "pointer",
           flex: 1,
-          color: isCopied ? "var(--green)" : undefined,
+          color: isCopied ? "var(--green)" : "var(--text)",
         }}
         title="Click to copy"
       >
@@ -178,14 +162,14 @@ function ApiKeyPanel({
       <button
         type="button"
         onClick={() => setVisible(!visible)}
-        style={{ padding: "2px 8px", fontSize: 11 }}
+        style={{ padding: "4px 8px", fontSize: 12 }}
       >
         {visible ? t("hide") : t("show")}
       </button>
       <button
         type="button"
         onClick={onRegenerate}
-        style={{ padding: "2px 8px", fontSize: 11 }}
+        style={{ padding: "4px 8px", fontSize: 12 }}
       >
         {t("regen")}
       </button>
@@ -242,7 +226,7 @@ function AccountActions({
   }
 
   return (
-    <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+    <div style={{ display: "flex", gap: "var(--space-sm)", flexShrink: 0 }}>
       {status === "running" && (
         <button onClick={onToggleUsage} disabled={usageLoading}>
           {usageLoading ? "..." : showUsage ? t("hideUsage") : t("usage")}
@@ -273,7 +257,6 @@ function AccountActions({
     </div>
   )
 }
-
 
 export function AccountCard({ account, proxyPort, onRefresh, batchUsage }: Props) {
   const status = account.status ?? "stopped"
@@ -375,19 +358,13 @@ export function AccountCard({ account, proxyPort, onRefresh, batchUsage }: Props
   }
 
   return (
-    <div
-      style={{
-        background: "var(--bg-card)",
-        border: "1px solid var(--border)",
-        borderRadius: "var(--radius)",
-        padding: 16,
-      }}
-    >
+    <div className="card animate-fade-in">
       <div
         style={{
           display: "flex",
           justifyContent: "space-between",
           alignItems: "flex-start",
+          marginBottom: "var(--space-md)",
         }}
       >
         <div>
@@ -395,21 +372,21 @@ export function AccountCard({ account, proxyPort, onRefresh, batchUsage }: Props
             style={{
               display: "flex",
               alignItems: "center",
-              gap: 10,
-              marginBottom: 4,
+              gap: "var(--space-md)",
+              marginBottom: "var(--space-xs)",
             }}
           >
-            <span style={{ fontSize: 16, fontWeight: 600 }}>
+            <h3 style={{ fontSize: 18, fontWeight: 600, margin: 0 }}>
               {account.name}
-            </span>
+            </h3>
             <StatusBadge status={status} />
           </div>
-          <div style={{ fontSize: 13, color: "var(--text-muted)" }}>
-            {account.user?.login ? `@${account.user.login} · ` : ""}
-            {account.accountType}
+          <div style={{ fontSize: 13, color: "var(--text-muted)", display: "flex", alignItems: "center", gap: "var(--space-sm)" }}>
+            {account.user?.login ? <span className="badge badge-neutral text-mono">@{account.user.login}</span> : null}
+            <span className="badge badge-neutral text-mono">{account.accountType}</span>
           </div>
           {account.error && (
-            <div style={{ fontSize: 12, color: "var(--red)", marginTop: 4 }}>
+            <div style={{ fontSize: 12, color: "var(--red)", marginTop: "var(--space-sm)" }}>
               {t("error")} {account.error}
             </div>
           )}
@@ -427,11 +404,11 @@ export function AccountCard({ account, proxyPort, onRefresh, batchUsage }: Props
 
       <div
         style={{
-          marginTop: 10,
           display: "flex",
           alignItems: "center",
-          gap: 8,
+          gap: "var(--space-sm)",
           fontSize: 13,
+          marginBottom: "var(--space-md)",
         }}
       >
         <span style={{ color: "var(--text-muted)" }}>{t("priorityLabel")}</span>
@@ -452,23 +429,15 @@ export function AccountCard({ account, proxyPort, onRefresh, batchUsage }: Props
             min={0}
             style={{
               width: 60,
-              padding: "2px 6px",
+              padding: "4px 8px",
               fontSize: 13,
-              display: "inline-block",
             }}
           />
         ) : (
           <span
+            className="badge badge-neutral text-mono"
             onClick={() => setEditingPriority(true)}
-            style={{
-              cursor: "pointer",
-              padding: "2px 10px",
-              background: "var(--bg)",
-              border: "1px solid var(--border)",
-              borderRadius: 4,
-              fontFamily: "monospace",
-              fontSize: 13,
-            }}
+            style={{ cursor: "pointer" }}
             title="Click to edit"
           >
             {account.priority ?? 0}
@@ -482,18 +451,19 @@ export function AccountCard({ account, proxyPort, onRefresh, batchUsage }: Props
       {/* Settings toggles */}
       <div
         style={{
-          marginTop: 10,
           display: "flex",
-          gap: 16,
+          gap: "var(--space-lg)",
           fontSize: 13,
+          marginBottom: "var(--space-md)",
         }}
       >
         <label
           style={{
             display: "flex",
             alignItems: "center",
-            gap: 8,
+            gap: "var(--space-sm)",
             cursor: "pointer",
+            margin: 0,
           }}
         >
           <span className="toggle-switch">
@@ -504,14 +474,15 @@ export function AccountCard({ account, proxyPort, onRefresh, batchUsage }: Props
             />
             <span className="toggle-slider" />
           </span>
-          <span style={{ color: "var(--text-muted)" }}>Rate Limit Wait</span>
+          <span style={{ color: "var(--text-muted)", marginTop: 0 }}>Rate Limit Wait</span>
         </label>
         <label
           style={{
             display: "flex",
             alignItems: "center",
-            gap: 8,
+            gap: "var(--space-sm)",
             cursor: "pointer",
+            margin: 0,
           }}
         >
           <span className="toggle-switch">
@@ -522,17 +493,19 @@ export function AccountCard({ account, proxyPort, onRefresh, batchUsage }: Props
             />
             <span className="toggle-slider" />
           </span>
-          <span style={{ color: "var(--text-muted)" }}>Manual Approve</span>
+          <span style={{ color: "var(--text-muted)", marginTop: 0 }}>Manual Approve</span>
         </label>
       </div>
+
+      <ApiKeyPanel apiKey={account.apiKey} onRegenerate={handleRegenerate} />
 
       {/* Quota / Usage display */}
       {(batchUsage || cachedUsage) && (
         <div
+          className="glass-panel"
           style={{
-            marginTop: 12,
-            padding: 12,
-            background: "var(--bg)",
+            marginTop: "var(--space-md)",
+            padding: "var(--space-md)",
             borderRadius: "var(--radius)",
           }}
         >
@@ -540,23 +513,23 @@ export function AccountCard({ account, proxyPort, onRefresh, batchUsage }: Props
             style={{
               fontSize: 12,
               color: "var(--text-muted)",
-              marginBottom: 8,
+              marginBottom: "var(--space-sm)",
               display: "flex",
               justifyContent: "space-between",
             }}
           >
-            <span>{t("plan")} {(batchUsage || cachedUsage!.usage).copilot_plan}</span>
+            <span>{t("plan")} <span className="text-mono">{(batchUsage || cachedUsage!.usage).copilot_plan}</span></span>
             {batchUsage ? (
-              <span style={{ color: "var(--green)" }}>Live Usage</span>
+              <span className="badge badge-green">Live Usage</span>
             ) : (
-              <span>Last query: {formatLastQuery(cachedUsage!.fetchedAt)}</span>
+              <span className="text-mono">Last query: {formatLastQuery(cachedUsage!.fetchedAt)}</span>
             )}
           </div>
           <UsagePanel usage={batchUsage || cachedUsage!.usage} />
         </div>
       )}
-      <ApiKeyPanel apiKey={account.apiKey} onRegenerate={handleRegenerate} />
-      {showUsage && !batchUsage && (usage ? <UsagePanel usage={usage} /> : <div style={{ marginTop: 12, fontSize: 13, color: "var(--text-muted)" }}>{t("usageUnavailable")}</div>)}
+      
+      {showUsage && !batchUsage && (usage ? <UsagePanel usage={usage} /> : <div style={{ marginTop: "var(--space-md)", fontSize: 13, color: "var(--text-muted)" }}>{t("usageUnavailable")}</div>)}
     </div>
   )
 }

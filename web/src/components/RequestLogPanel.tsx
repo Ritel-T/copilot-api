@@ -47,24 +47,17 @@ export function RequestLogPanel({ accounts }: RequestLogPanelProps) {
   }
 
   const thStyle: React.CSSProperties = {
-    padding: "8px 10px",
+    padding: "var(--space-sm) var(--space-md)",
     textAlign: "left",
-    fontSize: 12,
+    fontSize: "13px",
     fontWeight: 600,
+    fontFamily: '"Fira Code", monospace',
     color: "var(--text-muted)",
     borderBottom: "1px solid var(--border)",
   }
 
   return (
-    <div
-      style={{
-        background: "var(--bg-card)",
-        border: "1px solid var(--border)",
-        borderRadius: "var(--radius)",
-        padding: 16,
-        marginBottom: 16,
-      }}
-    >
+    <div className="card" style={{ marginBottom: "var(--space-lg)" }}>
       <div
         style={{
           display: "flex",
@@ -72,7 +65,7 @@ export function RequestLogPanel({ accounts }: RequestLogPanelProps) {
           alignItems: "center",
         }}
       >
-        <div style={{ fontSize: 15, fontWeight: 600 }}>{t("logs")}</div>
+        <div style={{ fontSize: "16px", fontWeight: 600, fontFamily: '"Fira Code", monospace' }}>{t("logs")}</div>
         <div style={{ display: "flex", gap: 8 }}>
           <button className="primary" onClick={() => void fetchLogs()} disabled={loading}>
             {loading ? t("refreshing") : t("showLogs")}

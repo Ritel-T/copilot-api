@@ -272,15 +272,7 @@ function PoolSettings({
   const proxyBase = `${window.location.protocol}//${window.location.hostname}:${proxyPort}`
 
   return (
-    <div
-      style={{
-        background: "var(--bg-card)",
-        border: "1px solid var(--border)",
-        borderRadius: "var(--radius)",
-        padding: 16,
-        marginBottom: 16,
-      }}
-    >
+    <div className="card" style={{ marginBottom: "var(--space-lg)" }}>
       <div
         style={{
           display: "flex",
@@ -289,8 +281,8 @@ function PoolSettings({
         }}
       >
         <div>
-          <div style={{ fontSize: 15, fontWeight: 600 }}>{t("poolMode")}</div>
-          <div style={{ fontSize: 13, color: "var(--text-muted)" }}>
+          <div style={{ fontSize: "16px", fontWeight: 600, fontFamily: '"Fira Code", monospace' }}>{t("poolMode")}</div>
+          <div style={{ fontSize: "14px", color: "var(--text-muted)" }}>
             {pool.enabled
               ? t("poolEnabledDesc")
               : t("poolDisabledDesc")}
@@ -307,7 +299,7 @@ function PoolSettings({
       </div>
       {pool.enabled && (
         <>
-          <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <div style={{ marginTop: "var(--space-md)", display: "flex", gap: "var(--space-sm)", flexWrap: "wrap" }}>
             {(["round-robin", "priority", "quota"] as const).map((s) => (
               <button
                 key={s}
@@ -477,25 +469,25 @@ function Dashboard() {
   }
 
   return (
-    <div style={{ padding: "24px 16px" }}>
+    <div style={{ padding: "var(--space-xl) var(--space-lg)", maxWidth: "1600px", margin: "0 auto" }}>
       <header
         style={{
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
-          marginBottom: 24,
+          marginBottom: "var(--space-2xl)",
         }}
       >
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 600 }}>{t("consoleTitle")}</h1>
-          <p style={{ color: "var(--text-muted)", fontSize: 14 }}>
+          <h1 style={{ fontSize: "28px", fontWeight: 700, margin: "0 0 var(--space-xs) 0", letterSpacing: "-0.02em" }}>{t("consoleTitle")}</h1>
+          <p style={{ color: "var(--text-muted)", fontSize: "16px", margin: 0 }}>
             {t("dashboardSubtitle")}
           </p>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
           <LanguageSwitcher />
-          <div style={{ display: "flex", alignItems: "center", gap: 4, marginRight: 8 }}>
-            <span style={{ fontSize: 13, color: "var(--text-muted)" }}>{t("autoRefresh")}</span>
+          <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)", marginRight: "var(--space-md)" }}>
+            <span style={{ fontSize: "13px", fontWeight: 500, color: "var(--text-muted)" }}>{t("autoRefresh")}</span>
             <select
               value={autoRefreshInterval}
               onChange={(e) => {
@@ -512,13 +504,19 @@ function Dashboard() {
               <option value={30}>30 {t("minutes")}</option>
             </select>
           </div>
-          <button onClick={() => void handleQueryAllUsage()} disabled={batchLoading}>
+          <button 
+            onClick={() => void handleQueryAllUsage()} 
+            disabled={batchLoading}
+            style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}
+          >
             {batchLoading ? t("refreshing") : t("queryAllUsage")}
           </button>
           <button className="primary" onClick={() => setShowForm(!showForm)}>
             {showForm ? t("cancel") : t("addAccount")}
           </button>
-          <button onClick={handleLogout}>{t("logout")}</button>
+          <button onClick={handleLogout} className="danger" style={{ background: "transparent" }}>
+            {t("logout")}
+          </button>
         </div>
       </header>
       <PoolSettings pool={pool} proxyPort={proxyPort} onChange={setPool} />

@@ -33,11 +33,11 @@ function DeviceCodeDisplay({
         onClick={() => void navigator.clipboard.writeText(userCode)}
         style={{
           display: "inline-block",
-          padding: "12px 24px",
-          background: "var(--bg)",
+          padding: "var(--space-md) var(--space-lg)",
+          background: "var(--bg-input)",
           border: "2px solid var(--accent)",
           borderRadius: "var(--radius)",
-          fontSize: 28,
+          fontSize: "32px",
           fontWeight: 700,
           fontFamily: "monospace",
           letterSpacing: 4,
@@ -58,12 +58,12 @@ function DeviceCodeDisplay({
         rel="noopener noreferrer"
         style={{
           display: "inline-block",
-          padding: "8px 20px",
+          padding: "var(--space-sm) var(--space-lg)",
           background: "var(--accent)",
           color: "#fff",
           borderRadius: "var(--radius)",
           textDecoration: "none",
-          fontSize: 14,
+          fontSize: "14px",
         }}
       >
         {t("openGithub")}
@@ -295,15 +295,7 @@ export function AddAccountForm({ onComplete, onCancel }: Props) {
   if (auth.step === "done") return null
 
   return (
-    <div
-      style={{
-        background: "var(--bg-card)",
-        border: "1px solid var(--border)",
-        borderRadius: "var(--radius)",
-        padding: 20,
-        marginBottom: 16,
-      }}
-    >
+    <div className="card animate-fade-in" style={{ marginBottom: "var(--space-lg)" }}>
       {auth.step === "config" && (
         <ConfigForm
           onSubmit={handleSubmit}

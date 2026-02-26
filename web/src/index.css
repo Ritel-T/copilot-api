@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap');
+
 *,
 *::before,
 *::after {
@@ -7,41 +9,80 @@
 }
 
 :root {
-  --bg: #0d1117;
-  --bg-card: #161b22;
-  --bg-input: #0d1117;
-  --border: #30363d;
-  --text: #e6edf3;
-  --text-muted: #8b949e;
-  --accent: #58a6ff;
-  --accent-hover: #79c0ff;
-  --green: #3fb950;
-  --red: #f85149;
-  --yellow: #d29922;
-  --radius: 8px;
+  /* Minimal Dark Mode (OLED) Palette */
+  --bg: #020617; /* Background */
+  --bg-card: #0F172A; /* Primary */
+  --bg-input: #020617;
+  --border: #1E293B; /* Secondary */
+  --border-hover: #334155;
+  --text: #F8FAFC;
+  --text-muted: #94A3B8;
+  --accent: #22C55E; /* CTA Green */
+  --accent-hover: #16A34A;
+  --accent-glow: rgba(34, 197, 94, 0.2);
+  --green: #22C55E;
+  --red: #EF4444;
+  --red-bg: rgba(239, 68, 68, 0.1);
+  --yellow: #F59E0B;
+  --radius: 12px;
+  
+  /* Spacing */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.3);
+  --shadow-md: 0 4px 6px rgba(0,0,0,0.4);
+  --shadow-lg: 0 10px 15px rgba(0,0,0,0.5);
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial,
-    sans-serif;
+  font-family: "Fira Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
   background: var(--bg);
   color: var(--text);
   line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
+h1, h2, h3, h4, h5, h6 {
+  font-family: "Fira Code", monospace;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+
+code, pre {
+  font-family: "Fira Code", monospace;
+}
+
+/* Base Components */
 button {
   cursor: pointer;
   border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 6px 16px;
+  border-radius: 8px;
+  padding: 8px 16px;
   font-size: 14px;
+  font-weight: 500;
   background: var(--bg-card);
   color: var(--text);
-  transition: background 0.15s;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
 }
 
-button:hover {
+button:hover:not(:disabled) {
   background: var(--border);
+  border-color: var(--border-hover);
+  transform: translateY(-1px);
+}
+
+button:active:not(:disabled) {
+  transform: translateY(0);
 }
 
 button:disabled {
@@ -53,43 +94,54 @@ button.primary {
   background: var(--accent);
   color: #fff;
   border-color: var(--accent);
+  text-shadow: 0 1px 2px rgba(0,0,0,0.2);
 }
 
-button.primary:hover {
+button.primary:hover:not(:disabled) {
   background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  box-shadow: 0 0 12px var(--accent-glow);
 }
 
 button.danger {
   color: var(--red);
+  border-color: var(--border);
+}
+
+button.danger:hover:not(:disabled) {
+  background: var(--red-bg);
   border-color: var(--red);
+  color: var(--red);
 }
 
-button.danger:hover {
-  background: rgba(248, 81, 73, 0.15);
-}
-
-input,
-select {
+input, select, textarea {
   background: var(--bg-input);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 8px 12px;
+  border-radius: 8px;
+  padding: 10px 14px;
   color: var(--text);
   font-size: 14px;
+  font-family: inherit;
   width: 100%;
+  transition: all 0.2s;
 }
 
-input:focus,
-select:focus {
+input:focus, select:focus, textarea:focus {
   outline: none;
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+input::placeholder {
+  color: var(--text-muted);
 }
 
 label {
   display: block;
   font-size: 13px;
+  font-weight: 500;
   color: var(--text-muted);
-  margin-bottom: 4px;
+  margin-bottom: 6px;
 }
 
 /* Hide number input spinners */
@@ -99,12 +151,30 @@ input[type="number"]::-webkit-inner-spin-button {
   margin: 0;
 }
 
+/* Card Styling */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-lg);
+  box-shadow: var(--shadow-sm);
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.card:hover {
+  border-color: var(--border-hover);
+  box-shadow: var(--shadow-md);
+}
+
 /* Toggle Switch */
 .toggle-switch {
   position: relative;
-  width: 36px;
-  height: 20px;
+  width: 40px;
+  height: 22px;
   flex-shrink: 0;
+  display: inline-block;
 }
 
 .toggle-switch input {
@@ -122,30 +192,107 @@ input[type="number"]::-webkit-inner-spin-button {
   right: 0;
   bottom: 0;
   background-color: var(--border);
-  transition: 0.2s;
-  border-radius: 20px;
+  transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 22px;
 }
 
 .toggle-slider:before {
   position: absolute;
   content: "";
-  height: 14px;
-  width: 14px;
+  height: 16px;
+  width: 16px;
   left: 3px;
   bottom: 3px;
-  background-color: var(--text);
-  transition: 0.2s;
+  background-color: var(--text-muted);
+  transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   border-radius: 50%;
 }
 
 .toggle-switch input:checked + .toggle-slider {
-  background-color: var(--green);
+  background-color: var(--accent);
 }
 
 .toggle-switch input:checked + .toggle-slider:before {
-  transform: translateX(16px);
+  transform: translateX(18px);
+  background-color: #fff;
 }
 
 .toggle-switch input:focus + .toggle-slider {
-  box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.3);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+/* Badge */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: "Fira Code", monospace;
+}
+
+.badge-green {
+  background: rgba(34, 197, 94, 0.15);
+  color: var(--green);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.badge-red {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--red);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.badge-yellow {
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--yellow);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.badge-neutral {
+  background: rgba(148, 163, 184, 0.15);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+/* Utility Classes */
+.text-mono {
+  font-family: "Fira Code", monospace;
+}
+
+.glass-panel {
+  background: rgba(15, 23, 42, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg); 
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border); 
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-hover); 
 }
