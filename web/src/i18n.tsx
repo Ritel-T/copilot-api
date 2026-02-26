@@ -104,6 +104,9 @@ const en = {
   totalSummary: "Total",
   noRunningAccounts: "No running accounts",
 
+  autoRefresh: "Auto Refresh:",
+  minutes: "min",
+  off: "Off",
   // Request Logs
   logs: "Request Logs",
   showLogs: "Show Logs",
@@ -221,6 +224,9 @@ const zh: Translations = {
   colResets: "重置日期",
   totalSummary: "合计",
   noRunningAccounts: "暂无运行中的账户",
+  autoRefresh: "自动刷新：",
+  minutes: "分钟",
+  off: "关闭",
 
   // Request Logs
   logs: "请求日志",

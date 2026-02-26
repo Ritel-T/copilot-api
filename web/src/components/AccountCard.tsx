@@ -197,6 +197,7 @@ interface Props {
   account: Account
   proxyPort: number
   onRefresh: () => Promise<void>
+  batchUsage: UsageData | null
 }
 
 function AccountActions({
@@ -274,7 +275,7 @@ function AccountActions({
 }
 
 
-export function AccountCard({ account, proxyPort, onRefresh }: Props) {
+export function AccountCard({ account, proxyPort, onRefresh, batchUsage }: Props) {
   const status = account.status ?? "stopped"
   const [usage, setUsage] = useState<UsageData | null>(null)
   const [usageLoading, setUsageLoading] = useState(false)
@@ -525,8 +526,8 @@ export function AccountCard({ account, proxyPort, onRefresh }: Props) {
         </label>
       </div>
 
-      {/* Cached usage display */}
-      {cachedUsage && (
+      {/* Quota / Usage display */}
+      {(batchUsage || cachedUsage) && (
         <div
           style={{
             marginTop: 12,
@@ -544,12 +545,18 @@ export function AccountCard({ account, proxyPort, onRefresh }: Props) {
               justifyContent: "space-between",
             }}
           >
-            <span>{t("plan")} {cachedUsage.usage.copilot_plan}</span>
-            <span>Last query: {formatLastQuery(cachedUsage.fetchedAt)}</span>
+            <span>{t("plan")} {(batchUsage || cachedUsage!.usage).copilot_plan}</span>
+            {batchUsage ? (
+              <span style={{ color: "var(--green)" }}>Live Usage</span>
+            ) : (
+              <span>Last query: {formatLastQuery(cachedUsage!.fetchedAt)}</span>
+            )}
           </div>
-          <UsagePanel usage={cachedUsage.usage} />
+          <UsagePanel usage={batchUsage || cachedUsage!.usage} />
         </div>
       )}
       <ApiKeyPanel apiKey={account.apiKey} onRegenerate={handleRegenerate} />
-      {showUsage && (usage ? <UsagePanel usage={usage} /> : <div style={{ marginTop: 12, fontSize: 13, color: "var(--text-muted)" }}>{t("usageUnavailable")}</div>)}
-          </div>)}
+      {showUsage && !batchUsage && (usage ? <UsagePanel usage={usage} /> : <div style={{ marginTop: 12, fontSize: 13, color: "var(--text-muted)" }}>{t("usageUnavailable")}</div>)}
+    </div>
+  )
+}

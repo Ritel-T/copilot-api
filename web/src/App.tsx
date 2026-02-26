@@ -169,10 +169,12 @@ function AccountList({
   accounts,
   proxyPort,
   onRefresh,
+  batchUsageData,
 }: {
   accounts: Array<Account>
   proxyPort: number
   onRefresh: () => Promise<void>
+  batchUsageData: Array<BatchUsageItem> | null
 }) {
   const t = useT()
 
@@ -196,7 +198,7 @@ function AccountList({
   return (
     <div style={{
       display: "grid",
-      gridTemplateColumns: "repeat(auto-fill, minmax(480px, 1fr))",
+      gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
       gap: 16,
     }}>
       {accounts.map((account) => (
@@ -205,6 +207,7 @@ function AccountList({
           account={account}
           proxyPort={proxyPort}
           onRefresh={onRefresh}
+          batchUsage={batchUsageData?.find(item => item.accountId === account.id)?.usage || null}
         />
       ))}
     </div>
@@ -406,137 +409,6 @@ function UsageCell({ used, total }: { used: number; total: number }) {
   )
 }
 
-function BatchUsagePanel() {
-  const [items, setItems] = useState<Array<BatchUsageItem>>([])
-  const [loading, setLoading] = useState(false)
-  const [open, setOpen] = useState(false)
-  const [fetched, setFetched] = useState(false)
-  const t = useT()
-
-  const fetchAll = async () => {
-    setLoading(true)
-    try {
-      const data = await api.getAllUsage()
-      setItems(data)
-      setFetched(true)
-      setOpen(true)
-    } catch (err) {
-      console.error("Batch usage failed:", err)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const runningItems = items.filter((i) => i.usage)
-
-  const totals = runningItems.reduce(
-    (acc, i) => {
-      const q = i.usage!.quota_snapshots
-      acc.premiumUsed += q.premium_interactions.entitlement - q.premium_interactions.remaining
-      acc.premiumTotal += q.premium_interactions.entitlement
-      acc.chatUsed += q.chat.entitlement - q.chat.remaining
-      acc.chatTotal += q.chat.entitlement
-      acc.compUsed += q.completions.entitlement - q.completions.remaining
-      acc.compTotal += q.completions.entitlement
-      return acc
-    },
-    { premiumUsed: 0, premiumTotal: 0, chatUsed: 0, chatTotal: 0, compUsed: 0, compTotal: 0 },
-  )
-
-  const thStyle: React.CSSProperties = {
-    padding: "8px 10px",
-    textAlign: "left",
-    fontSize: 12,
-    fontWeight: 600,
-    color: "var(--text-muted)",
-    borderBottom: "1px solid var(--border)",
-  }
-
-  return (
-    <div
-      style={{
-        background: "var(--bg-card)",
-        border: "1px solid var(--border)",
-        borderRadius: "var(--radius)",
-        padding: 16,
-        marginBottom: 16,
-      }}
-    >
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div style={{ fontSize: 15, fontWeight: 600 }}>{t("batchUsage")}</div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button className="primary" onClick={() => void fetchAll()} disabled={loading}>
-            {loading ? t("refreshing") : t("queryAllUsage")}
-          </button>
-          {fetched && (
-            <button onClick={() => setOpen(!open)}>
-              {open ? t("hide") : t("show")}
-            </button>
-          )}
-        </div>
-      </div>
-
-      {open && fetched && (
-        <div style={{ marginTop: 12, overflowX: "auto" }}>
-          {runningItems.length === 0 ? (
-            <div style={{ color: "var(--text-muted)", fontSize: 13, padding: 16, textAlign: "center" }}>
-              {t("noRunningAccounts")}
-            </div>
-          ) : (
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-              <thead>
-                <tr>
-                  <th style={thStyle}>{t("colAccount")}</th>
-                  <th style={thStyle}>{t("colPlan")}</th>
-                  <th style={thStyle}>{t("colPremium")}</th>
-                  <th style={thStyle}>{t("colChat")}</th>
-                  <th style={thStyle}>{t("colCompletions")}</th>
-                  <th style={thStyle}>{t("colResets")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {runningItems.map((item) => {
-                  const q = item.usage!.quota_snapshots
-                  return (
-                    <tr key={item.accountId} style={{ borderBottom: "1px solid var(--border)" }}>
-                      <td style={{ padding: "8px 10px", fontSize: 13, fontWeight: 500 }}>{item.name}</td>
-                      <td style={{ padding: "8px 10px", fontSize: 12, color: "var(--text-muted)" }}>
-                        {item.usage!.copilot_plan}
-                      </td>
-                      <UsageCell
-                        used={q.premium_interactions.entitlement - q.premium_interactions.remaining}
-                        total={q.premium_interactions.entitlement}
-                      />
-                      <UsageCell
-                        used={q.chat.entitlement - q.chat.remaining}
-                        total={q.chat.entitlement}
-                      />
-                      <UsageCell
-                        used={q.completions.entitlement - q.completions.remaining}
-                        total={q.completions.entitlement}
-                      />
-                      <td style={{ padding: "8px 10px", fontSize: 12, color: "var(--text-muted)" }}>
-                        {item.usage!.quota_reset_date}
-                      </td>
-                    </tr>
-                  )
-                })}
-                <tr style={{ fontWeight: 600, borderTop: "2px solid var(--border)" }}>
-                  <td style={{ padding: "8px 10px", fontSize: 13 }}>{t("totalSummary")}</td>
-                  <td />
-                  <UsageCell used={totals.premiumUsed} total={totals.premiumTotal} />
-                  <UsageCell used={totals.chatUsed} total={totals.chatTotal} />
-                  <UsageCell used={totals.compUsed} total={totals.compTotal} />
-                  <td />
-                </tr>
-              </tbody>
-            </table>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
 
 function Dashboard() {
   const [accounts, setAccounts] = useState<Array<Account>>([])
@@ -547,7 +419,25 @@ function Dashboard() {
     enabled: false,
     strategy: "round-robin",
   })
+  const [batchUsageData, setBatchUsageData] = useState<Array<BatchUsageItem> | null>(null)
+  const [batchLoading, setBatchLoading] = useState(false)
+  const [autoRefreshInterval, setAutoRefreshInterval] = useState<number>(() => {
+    const saved = localStorage.getItem("autoRefreshInterval")
+    return saved ? parseInt(saved, 10) : 0
+  })
   const t = useT()
+
+  const handleQueryAllUsage = async () => {
+    setBatchLoading(true)
+    try {
+      const data = await api.getAllUsage()
+      setBatchUsageData(data)
+    } catch (err) {
+      console.error("Batch usage failed:", err)
+    } finally {
+      setBatchLoading(false)
+    }
+  }
 
   const refresh = useCallback(async () => {
     try {
@@ -568,6 +458,14 @@ function Dashboard() {
     return () => clearInterval(interval)
   }, [refresh])
 
+  useEffect(() => {
+    if (autoRefreshInterval <= 0) return
+    const interval = setInterval(() => {
+      void handleQueryAllUsage()
+    }, autoRefreshInterval * 60 * 1000)
+    return () => clearInterval(interval)
+  }, [autoRefreshInterval])
+
   const handleAdd = async () => {
     setShowForm(false)
     await refresh()
@@ -579,7 +477,7 @@ function Dashboard() {
   }
 
   return (
-    <div style={{ maxWidth: 960, margin: "0 auto", padding: "24px 16px" }}>
+    <div style={{ padding: "24px 16px" }}>
       <header
         style={{
           display: "flex",
@@ -594,18 +492,36 @@ function Dashboard() {
             {t("dashboardSubtitle")}
           </p>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
           <LanguageSwitcher />
+          <div style={{ display: "flex", alignItems: "center", gap: 4, marginRight: 8 }}>
+            <span style={{ fontSize: 13, color: "var(--text-muted)" }}>{t("autoRefresh")}</span>
+            <select
+              value={autoRefreshInterval}
+              onChange={(e) => {
+                const val = parseInt(e.target.value, 10)
+                setAutoRefreshInterval(val)
+                localStorage.setItem("autoRefreshInterval", val.toString())
+              }}
+              style={{ fontSize: 13, padding: "2px 4px", borderRadius: 4, border: "1px solid var(--border)", background: "var(--bg)" }}
+            >
+              <option value={0}>{t("off")}</option>
+              <option value={1}>1 {t("minutes")}</option>
+              <option value={5}>5 {t("minutes")}</option>
+              <option value={10}>10 {t("minutes")}</option>
+              <option value={30}>30 {t("minutes")}</option>
+            </select>
+          </div>
+          <button onClick={() => void handleQueryAllUsage()} disabled={batchLoading}>
+            {batchLoading ? t("refreshing") : t("queryAllUsage")}
+          </button>
           <button className="primary" onClick={() => setShowForm(!showForm)}>
             {showForm ? t("cancel") : t("addAccount")}
           </button>
           <button onClick={handleLogout}>{t("logout")}</button>
         </div>
       </header>
-
       <PoolSettings pool={pool} proxyPort={proxyPort} onChange={setPool} />
-
-      <BatchUsagePanel />
 
       <RequestLogPanel accounts={accounts} />
 
@@ -616,7 +532,7 @@ function Dashboard() {
         />
       )}
 
-      {loading ?
+      {loading ? (
         <p
           style={{
             color: "var(--text-muted)",
@@ -626,12 +542,14 @@ function Dashboard() {
         >
           {t("loading")}
         </p>
-      : <AccountList
+      ) : (
+        <AccountList
           accounts={accounts}
           proxyPort={proxyPort}
           onRefresh={refresh}
+          batchUsageData={batchUsageData}
         />
-      }
+      )}
     </div>
   )
 }
