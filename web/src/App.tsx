@@ -198,8 +198,9 @@ function AccountList({
   return (
     <div style={{
       display: "grid",
-      gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
-      gap: 16,
+      gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
+      gap: "var(--space-md)",
+      alignItems: "stretch",
     }}>
       {accounts.map((account) => (
         <AccountCard
@@ -486,23 +487,28 @@ function Dashboard() {
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
           <LanguageSwitcher />
-          <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)", marginRight: "var(--space-md)" }}>
-            <span style={{ fontSize: "13px", fontWeight: 500, color: "var(--text-muted)" }}>{t("autoRefresh")}</span>
-            <select
+          <div style={{ display: "flex", alignItems: "center", gap: "var(--space-xs)", marginRight: "var(--space-md)" }}>
+            <span style={{ fontSize: "13px", fontWeight: 500, color: "var(--text-muted)", whiteSpace: "nowrap" }}>{t("autoRefresh")}</span>
+            <input
+              type="number"
+              min={0}
+              max={1440}
               value={autoRefreshInterval}
               onChange={(e) => {
-                const val = parseInt(e.target.value, 10)
+                const val = parseInt(e.target.value, 10) || 0
                 setAutoRefreshInterval(val)
                 localStorage.setItem("autoRefreshInterval", val.toString())
               }}
-              style={{ fontSize: 13, padding: "2px 4px", borderRadius: 4, border: "1px solid var(--border)", background: "var(--bg)" }}
-            >
-              <option value={0}>{t("off")}</option>
-              <option value={1}>1 {t("minutes")}</option>
-              <option value={5}>5 {t("minutes")}</option>
-              <option value={10}>10 {t("minutes")}</option>
-              <option value={30}>30 {t("minutes")}</option>
-            </select>
+              style={{
+                width: 56,
+                fontSize: 13,
+                padding: "4px 8px",
+                textAlign: "center",
+              }}
+              placeholder="0"
+              title="0 = Off"
+            />
+            <span style={{ fontSize: "12px", color: "var(--text-muted)", whiteSpace: "nowrap" }}>{t("minutes")}</span>
           </div>
           <button 
             onClick={() => void handleQueryAllUsage()} 

@@ -296,3 +296,27 @@ input[type="number"]::-webkit-inner-spin-button {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--border-hover); 
 }
+
+/* Account Card Grid - Ensure cards stretch to fill */
+.card {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.card > div:last-child {
+  margin-top: auto;
+}
+
+/* Input number styling for auto refresh */
+input[type="number"]:invalid {
+  border-color: var(--red);
+}
+
+/* Ensure grid items stretch */
+.grid-stretch {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: var(--space-md);
+  align-items: stretch;
+}

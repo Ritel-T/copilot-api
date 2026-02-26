@@ -106,7 +106,7 @@ const en = {
 
   autoRefresh: "Auto Refresh:",
   minutes: "min",
-  off: "Off",
+  // Request Logs
   // Request Logs
   logs: "Request Logs",
   showLogs: "Show Logs",
@@ -226,7 +226,7 @@ const zh: Translations = {
   noRunningAccounts: "暂无运行中的账户",
   autoRefresh: "自动刷新：",
   minutes: "分钟",
-  off: "关闭",
+  // Request Logs
 
   // Request Logs
   logs: "请求日志",

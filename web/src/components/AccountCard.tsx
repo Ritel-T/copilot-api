@@ -499,37 +499,45 @@ export function AccountCard({ account, proxyPort, onRefresh, batchUsage }: Props
 
       <ApiKeyPanel apiKey={account.apiKey} onRegenerate={handleRegenerate} />
 
-      {/* Quota / Usage display */}
-      {(batchUsage || cachedUsage) && (
+      {/* Quota / Usage display - Always show */}
+      <div
+        className="glass-panel"
+        style={{
+          marginTop: "var(--space-md)",
+          padding: "var(--space-md)",
+          borderRadius: "var(--radius)",
+        }}
+      >
         <div
-          className="glass-panel"
           style={{
-            marginTop: "var(--space-md)",
-            padding: "var(--space-md)",
-            borderRadius: "var(--radius)",
+            fontSize: 12,
+            color: "var(--text-muted)",
+            marginBottom: "var(--space-sm)",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
           }}
         >
-          <div
-            style={{
-              fontSize: 12,
-              color: "var(--text-muted)",
-              marginBottom: "var(--space-sm)",
-              display: "flex",
-              justifyContent: "space-between",
-            }}
-          >
-            <span>{t("plan")} <span className="text-mono">{(batchUsage || cachedUsage!.usage).copilot_plan}</span></span>
-            {batchUsage ? (
-              <span className="badge badge-green">Live Usage</span>
-            ) : (
-              <span className="text-mono">Last query: {formatLastQuery(cachedUsage!.fetchedAt)}</span>
-            )}
-          </div>
-          <UsagePanel usage={batchUsage || cachedUsage!.usage} />
+          <span>{t("plan")} <span className="text-mono">{(batchUsage || cachedUsage?.usage)?.copilot_plan ?? "-"}</span></span>
+          {batchUsage ? (
+            <span className="badge badge-green">Live</span>
+          ) : cachedUsage ? (
+            <span className="text-mono" style={{ fontSize: 11 }}>Cached: {formatLastQuery(cachedUsage.fetchedAt)}</span>
+          ) : (
+            <span className="badge badge-neutral">No Data</span>
+          )}
         </div>
-      )}
+        {(batchUsage || cachedUsage) ? (
+          <UsagePanel usage={batchUsage || cachedUsage!.usage} />
+        ) : (
+          <div style={{ textAlign: "center", padding: "var(--space-md)", color: "var(--text-muted)", fontSize: 13 }}>
+            <p style={{ margin: 0 }}>{t("usageUnavailable")}</p>
+            <p style={{ margin: "var(--space-xs) 0 0 0", fontSize: 11, opacity: 0.7 }}>Click "Query All Usage" to fetch data</p>
+          </div>
+        )}
+      </div>
       
-      {showUsage && !batchUsage && (usage ? <UsagePanel usage={usage} /> : <div style={{ marginTop: "var(--space-md)", fontSize: 13, color: "var(--text-muted)" }}>{t("usageUnavailable")}</div>)}
+      {showUsage && !batchUsage && !cachedUsage && usage && <UsagePanel usage={usage} />}
     </div>
   )
 }
