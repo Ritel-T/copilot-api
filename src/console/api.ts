@@ -144,6 +144,8 @@ consoleApi.get("/accounts/usage", async (c) => {
       }
       try {
         const usage = await getInstanceUsage(account.id)
+        // Save to cache
+        await setCachedUsage(account.id, usage)
         return { accountId: account.id, name: account.name, status, usage }
       } catch {
         return {
