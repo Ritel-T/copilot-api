@@ -12,6 +12,7 @@ export const PATHS = {
   GITHUB_TOKEN_PATH,
   CONFIG_PATH,
   REQUEST_LOG_DIR: path.join(APP_DIR, "logs"),
+  USAGE_CACHE_PATH: path.join(APP_DIR, "usage-cache.json"),
 }
 
 export async function ensurePaths(): Promise<void> {
