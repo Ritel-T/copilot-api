@@ -1,6 +1,6 @@
 import { useState } from "react"
 
-import { api, type Account, type UsageData } from "../api"
+import { api, type Account, type CachedUsageResponse, type UsageData } from "../api"
 import { useT } from "../i18n"
 
 function StatusBadge({ status }: { status: string }) {
@@ -128,7 +128,7 @@ function ApiKeyPanel({
   const [copied, copy] = useCopyFeedback()
   const t = useT()
   const safeKey = apiKey ?? ""
-  const masked = safeKey.length > 8 ? `${safeKey.slice(0, 8)}${"•".repeat(24)}` : safeKey
+  const masked = safeKey.length > 8 ? `${safeKey.slice(0, 8)}${"•".repeat(8)}` : safeKey
   const isCopied = copied === safeKey
 
   return (
@@ -179,25 +179,24 @@ function ApiKeyPanel({
 
 interface Props {
   account: Account
-  proxyPort: number
   onRefresh: () => Promise<void>
   batchUsage: UsageData | null
+  initialCachedUsage: CachedUsageResponse | null
+  proxyPort?: number
 }
 
 function AccountActions({
   account,
   status,
   onRefresh,
-  onToggleUsage,
+  onRefreshUsage,
   usageLoading,
-  showUsage,
 }: {
   account: Account
   status: string
   onRefresh: () => Promise<void>
-  onToggleUsage: () => void
+  onRefreshUsage: () => void
   usageLoading: boolean
-  showUsage: boolean
 }) {
   const [actionLoading, setActionLoading] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -228,8 +227,8 @@ function AccountActions({
   return (
     <div style={{ display: "flex", gap: "var(--space-sm)", flexShrink: 0 }}>
       {status === "running" && (
-        <button onClick={onToggleUsage} disabled={usageLoading}>
-          {usageLoading ? "..." : showUsage ? t("hideUsage") : t("usage")}
+        <button onClick={onRefreshUsage} disabled={usageLoading}>
+          {usageLoading ? "..." : t("usage")}
         </button>
       )}
       {status === "running" ?
@@ -258,51 +257,23 @@ function AccountActions({
   )
 }
 
-export function AccountCard({ account, proxyPort, onRefresh, batchUsage }: Props) {
+export function AccountCard({ account, onRefresh, batchUsage, initialCachedUsage, proxyPort }: Props) {
   const status = account.status ?? "stopped"
-  const [usage, setUsage] = useState<UsageData | null>(null)
   const [usageLoading, setUsageLoading] = useState(false)
-  const [showUsage, setShowUsage] = useState(false)
+  const [localUsage, setLocalUsage] = useState<UsageData | null>(null)
   const [editingPriority, setEditingPriority] = useState(false)
   const [priorityValue, setPriorityValue] = useState(
     String(account.priority ?? 0),
   )
-  const [cachedUsage, setCachedUsage] = useState<{
-    usage: UsageData
-    fetchedAt: string
-  } | null>(null)
   const t = useT()
 
-  // Load cached usage on mount
-  useState(() => {
-    void (async () => {
-      try {
-        const cached = await api.getCachedUsage(account.id)
-        setCachedUsage(cached)
-      } catch {
-        // No cached data
-      }
-    })()
-  })
-
-  const handleToggleUsage = async () => {
-    if (showUsage) {
-      setShowUsage(false)
-      return
-    }
+  const handleRefreshUsage = async () => {
     setUsageLoading(true)
     try {
       const data = await api.getUsage(account.id)
-      setUsage(data)
-      setShowUsage(true)
-      // Update cached usage
-      setCachedUsage({
-        usage: data,
-        fetchedAt: new Date().toISOString(),
-      })
-    } catch {
-      setUsage(null)
-      setShowUsage(true)
+      setLocalUsage(data)
+    } catch (err) {
+      console.error("Failed to fetch usage:", err)
     } finally {
       setUsageLoading(false)
     }
@@ -392,13 +363,38 @@ export function AccountCard({ account, proxyPort, onRefresh, batchUsage }: Props
           )}
         </div>
 
+        {/* Toggles stacked vertically */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-sm)", marginRight: "var(--space-md)", marginTop: "var(--space-xs)" }}>
+          <label style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)", cursor: "pointer", margin: 0 }}>
+            <span className="toggle-switch">
+              <input
+                type="checkbox"
+                checked={account.rateLimitWait ?? false}
+                onChange={(e) => handleToggle("rateLimitWait", e.target.checked)}
+              />
+              <span className="toggle-slider" />
+            </span>
+            <span style={{ color: "var(--text-muted)", fontSize: 12 }}>Rate Limit Wait</span>
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)", cursor: "pointer", margin: 0 }}>
+            <span className="toggle-switch">
+              <input
+                type="checkbox"
+                checked={account.manualApprove ?? false}
+                onChange={(e) => handleToggle("manualApprove", e.target.checked)}
+              />
+              <span className="toggle-slider" />
+            </span>
+            <span style={{ color: "var(--text-muted)", fontSize: 12 }}>Manual Approve</span>
+          </label>
+        </div>
+
         <AccountActions
           account={account}
           status={status}
           onRefresh={onRefresh}
-          onToggleUsage={() => void handleToggleUsage()}
+          onRefreshUsage={handleRefreshUsage}
           usageLoading={usageLoading}
-          showUsage={showUsage}
         />
       </div>
 
@@ -448,55 +444,6 @@ export function AccountCard({ account, proxyPort, onRefresh, batchUsage }: Props
         </span>
       </div>
 
-      {/* Settings toggles */}
-      <div
-        style={{
-          display: "flex",
-          gap: "var(--space-lg)",
-          fontSize: 13,
-          marginBottom: "var(--space-md)",
-        }}
-      >
-        <label
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "var(--space-sm)",
-            cursor: "pointer",
-            margin: 0,
-          }}
-        >
-          <span className="toggle-switch">
-            <input
-              type="checkbox"
-              checked={account.rateLimitWait ?? false}
-              onChange={(e) => handleToggle("rateLimitWait", e.target.checked)}
-            />
-            <span className="toggle-slider" />
-          </span>
-          <span style={{ color: "var(--text-muted)", marginTop: 0 }}>Rate Limit Wait</span>
-        </label>
-        <label
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "var(--space-sm)",
-            cursor: "pointer",
-            margin: 0,
-          }}
-        >
-          <span className="toggle-switch">
-            <input
-              type="checkbox"
-              checked={account.manualApprove ?? false}
-              onChange={(e) => handleToggle("manualApprove", e.target.checked)}
-            />
-            <span className="toggle-slider" />
-          </span>
-          <span style={{ color: "var(--text-muted)", marginTop: 0 }}>Manual Approve</span>
-        </label>
-      </div>
-
       <ApiKeyPanel apiKey={account.apiKey} onRegenerate={handleRegenerate} />
 
       {/* Quota / Usage display - Always show */}
@@ -518,26 +465,26 @@ export function AccountCard({ account, proxyPort, onRefresh, batchUsage }: Props
             alignItems: "center",
           }}
         >
-          <span>{t("plan")} <span className="text-mono">{(batchUsage || cachedUsage?.usage)?.copilot_plan ?? "-"}</span></span>
-          {batchUsage ? (
+          <span>{t("plan")} <span className="text-mono">{(localUsage || batchUsage || initialCachedUsage?.usage)?.copilot_plan ?? "-"}</span></span>
+          {localUsage ? (
+            <span className="badge badge-blue">Queried</span>
+          ) : batchUsage ? (
             <span className="badge badge-green">Live</span>
-          ) : cachedUsage ? (
-            <span className="text-mono" style={{ fontSize: 11 }}>Cached: {formatLastQuery(cachedUsage.fetchedAt)}</span>
+          ) : initialCachedUsage ? (
+            <span className="text-mono" style={{ fontSize: 11 }}>Cached: {formatLastQuery(initialCachedUsage.fetchedAt)}</span>
           ) : (
             <span className="badge badge-neutral">No Data</span>
           )}
         </div>
-        {(batchUsage || cachedUsage) ? (
-          <UsagePanel usage={batchUsage || cachedUsage!.usage} />
+        {(localUsage || batchUsage || initialCachedUsage) ? (
+          <UsagePanel usage={localUsage || batchUsage || initialCachedUsage!.usage} />
         ) : (
           <div style={{ textAlign: "center", padding: "var(--space-md)", color: "var(--text-muted)", fontSize: 13 }}>
             <p style={{ margin: 0 }}>{t("usageUnavailable")}</p>
-            <p style={{ margin: "var(--space-xs) 0 0 0", fontSize: 11, opacity: 0.7 }}>Click "Query All Usage" to fetch data</p>
+            <p style={{ margin: "var(--space-xs) 0 0 0", fontSize: 11, opacity: 0.7 }}>Click "{t("usage")}" to fetch data</p>
           </div>
         )}
       </div>
-      
-      {showUsage && !batchUsage && !cachedUsage && usage && <UsagePanel usage={usage} />}
     </div>
   )
 }

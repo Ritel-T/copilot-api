@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react"
 
-import { api, getSessionToken, setSessionToken, type Account, type BatchUsageItem, type PoolConfig } from "./api"
+import { api, getSessionToken, setSessionToken, type Account, type BatchUsageItem, type CachedUsageResponse, type PoolConfig } from "./api"
 import { AccountCard } from "./components/AccountCard"
 import { AddAccountForm } from "./components/AddAccountForm"
 import { RequestLogPanel } from "./components/RequestLogPanel"
@@ -167,16 +167,17 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
 
 function AccountList({
   accounts,
-  proxyPort,
   onRefresh,
   batchUsageData,
+  cachedUsageData,
 }: {
   accounts: Array<Account>
-  proxyPort: number
   onRefresh: () => Promise<void>
   batchUsageData: Array<BatchUsageItem> | null
+  cachedUsageData: Record<string, CachedUsageResponse> | null
 }) {
   const t = useT()
+
 
   if (accounts.length === 0) {
     return (
@@ -206,9 +207,9 @@ function AccountList({
         <AccountCard
           key={account.id}
           account={account}
-          proxyPort={proxyPort}
           onRefresh={onRefresh}
           batchUsage={batchUsageData?.find(item => item.accountId === account.id)?.usage || null}
+          initialCachedUsage={cachedUsageData?.[account.id] || null}
         />
       ))}
     </div>
@@ -413,6 +414,7 @@ function Dashboard() {
     strategy: "round-robin",
   })
   const [batchUsageData, setBatchUsageData] = useState<Array<BatchUsageItem> | null>(null)
+  const [cachedUsageData, setCachedUsageData] = useState<Record<string, CachedUsageResponse> | null>(null)
   const [batchLoading, setBatchLoading] = useState(false)
   const [autoRefreshInterval, setAutoRefreshInterval] = useState<number>(() => {
     const saved = localStorage.getItem("autoRefreshInterval")
@@ -446,6 +448,7 @@ function Dashboard() {
   useEffect(() => {
     void api.getConfig().then((cfg) => setProxyPort(cfg.proxyPort))
     void api.getPool().then(setPool).catch(() => {})
+    void api.getAllCachedUsage().then(setCachedUsageData).catch(() => {})
     void refresh()
     const interval = setInterval(() => void refresh(), 5000)
     return () => clearInterval(interval)
@@ -549,9 +552,9 @@ function Dashboard() {
       ) : (
         <AccountList
           accounts={accounts}
-          proxyPort={proxyPort}
           onRefresh={refresh}
           batchUsageData={batchUsageData}
+          cachedUsageData={cachedUsageData}
         />
       )}
     </div>

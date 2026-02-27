@@ -158,6 +158,10 @@ export const api = {
 
   getAllUsage: () => request<Array<BatchUsageItem>>("/accounts/usage"),
 
+
+  getAllCachedUsage: () =>
+    request<Record<string, CachedUsageResponse>>("/accounts/usage/cached"),
+
   regenerateKey: (id: string) =>
     request<Account>(`/accounts/${id}/regenerate-key`, { method: "POST" }),
 

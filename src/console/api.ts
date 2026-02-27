@@ -30,7 +30,11 @@ import {
   startInstance,
   stopInstance,
 } from "./instance-manager"
-import { getCachedUsage, setCachedUsage } from "./usage-cache"
+import {
+  getAllCachedUsage,
+  getCachedUsage,
+  setCachedUsage,
+} from "./usage-cache"
 let proxyPort = 4141
 
 export function setProxyPort(port: number): void {
@@ -152,6 +156,11 @@ consoleApi.get("/accounts/usage", async (c) => {
     }),
   )
   return c.json(results)
+})
+// Get all cached usage for all accounts
+consoleApi.get("/accounts/usage/cached", async (c) => {
+  const cached = await getAllCachedUsage()
+  return c.json(cached)
 })
 
 // Get single account
