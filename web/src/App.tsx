@@ -198,7 +198,7 @@ function AccountList({
   return (
     <div style={{
       display: "grid",
-      gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
+      gridTemplateColumns: "repeat(auto-fill, minmax(380px, 1fr))",
       gap: "var(--space-md)",
       alignItems: "stretch",
     }}>

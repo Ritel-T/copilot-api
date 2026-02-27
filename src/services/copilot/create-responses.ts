@@ -340,6 +340,64 @@ interface ResponsesRequestOptions {
   initiator: "agent" | "user"
 }
 
+// ─── OpenAI to Responses Input Translation ────────────────────────────────────
+
+/**
+ * Translates OpenAI Chat Completions messages to Responses API input format.
+ * Handles tool_calls and tool result messages.
+ */
+const translateOpenAIMessagesToResponsesInput = (
+  messages: Array<ChatCompletionsPayload["messages"][number]>,
+): Array<ResponseInputItem> => {
+  const items: Array<ResponseInputItem> = []
+
+  for (const message of messages) {
+    // Handle tool result messages
+    if (message.role === "tool" && message.tool_call_id) {
+      items.push({
+        type: "function_call_output",
+        call_id: message.tool_call_id,
+        output: typeof message.content === "string" ? message.content : "",
+        status: "completed",
+      })
+      continue
+    }
+
+    // Handle assistant messages with tool calls
+    if (message.role === "assistant" && message.tool_calls?.length) {
+      // First, add any text content as a message
+      if (message.content) {
+        items.push({
+          type: "message",
+          role: "assistant",
+          content: message.content,
+        })
+      }
+
+      // Then add function_call items for each tool call
+      for (const toolCall of message.tool_calls) {
+        items.push({
+          type: "function_call",
+          call_id: toolCall.id,
+          name: toolCall.function.name,
+          arguments: toolCall.function.arguments,
+          status: "completed",
+        })
+      }
+      continue
+    }
+
+    // Handle regular messages (user, assistant without tools, system, developer)
+    items.push({
+      type: "message",
+      role: message.role as "user" | "assistant" | "system" | "developer",
+      content: message.content ?? "",
+    })
+  }
+
+  return items
+}
+
 // ─── createResponses (for single-account mode) ────────────────────────────────
 
 export const createResponses = async (
@@ -397,7 +455,7 @@ export const createResponsesAsCompletions = async (
   // --- translate request ---
   const requestBody: Record<string, unknown> = {
     model: payload.model,
-    input: payload.messages,
+    input: translateOpenAIMessagesToResponsesInput(payload.messages),
     stream: payload.stream ?? false,
   }
   if (payload.max_tokens !== null)

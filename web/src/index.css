@@ -313,10 +313,10 @@ input[type="number"]:invalid {
   border-color: var(--red);
 }
 
-/* Ensure grid items stretch */
+
 .grid-stretch {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
   gap: var(--space-md);
   align-items: stretch;
-}
+  }
