@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto"
+import { getDeviceIdSync, getSessionId } from "./device-id"
 
 import type { State } from "./state"
 
@@ -27,6 +28,8 @@ export const copilotHeaders = (state: State, vision: boolean = false) => {
     "x-github-api-version": API_VERSION,
     "x-request-id": randomUUID(),
     "x-vscode-user-agent-library-version": "electron-fetch",
+    "editor-device-id": getDeviceIdSync() || "",
+    "x-session-id": getSessionId(),
   }
 
   if (vision) headers["copilot-vision-request"] = "true"
@@ -48,4 +51,4 @@ export const githubHeaders = (state: State) => ({
 export const GITHUB_BASE_URL = "https://github.com"
 export const GITHUB_CLIENT_ID =
   process.env.GITHUB_CLIENT_ID || "Ov23liOOj27Iqq5BVNMf"
-export const GITHUB_APP_SCOPES = ["read:user"].join(" ")
+export const GITHUB_APP_SCOPES = ["user:email"].join(" ")

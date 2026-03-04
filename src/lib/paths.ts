@@ -13,6 +13,7 @@ export const PATHS = {
   CONFIG_PATH,
   REQUEST_LOG_DIR: path.join(APP_DIR, "logs"),
   USAGE_CACHE_PATH: path.join(APP_DIR, "usage-cache.json"),
+  DEVICE_ID_PATH: path.join(APP_DIR, "device_id"),
 }
 
 export async function ensurePaths(): Promise<void> {

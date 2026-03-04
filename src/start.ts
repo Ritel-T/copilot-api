@@ -7,11 +7,13 @@ import { serve, type ServerHandler } from "srvx"
 import invariant from "tiny-invariant"
 
 import { ensurePaths } from "./lib/paths"
+import { getDeviceId } from "./lib/device-id"
 import { initProxyFromEnv } from "./lib/proxy"
 import { generateEnvScript } from "./lib/shell"
 import { state } from "./lib/state"
 import { setupCopilotToken, setupGitHubToken } from "./lib/token"
 import { cacheModels, cacheVSCodeVersion } from "./lib/utils"
+import { runDiagnostics } from "./lib/diagnostics"
 import { server } from "./server"
 
 interface RunServerOptions {
@@ -24,8 +26,14 @@ interface RunServerOptions {
   githubToken?: string
   claudeCode: boolean
   showToken: boolean
+  diagnose: boolean
   proxyEnv: boolean
 }
+
+  if (options.diagnose) {
+    await runDiagnostics()
+    process.exit(0)
+  }
 
 export async function runServer(options: RunServerOptions): Promise<void> {
   if (options.proxyEnv) {
@@ -49,6 +57,7 @@ export async function runServer(options: RunServerOptions): Promise<void> {
 
   await ensurePaths()
   await cacheVSCodeVersion()
+  await getDeviceId()
 
   if (options.githubToken) {
     state.githubToken = options.githubToken
@@ -182,6 +191,11 @@ export const start = defineCommand({
     "proxy-env": {
       type: "boolean",
       default: false,
+    diagnose: {
+      type: "boolean",
+      default: false,
+      description: "Run diagnostics and display results",
+    },
       description: "Initialize proxy from environment variables",
     },
   },
@@ -200,6 +214,7 @@ export const start = defineCommand({
       rateLimitWait: args.wait,
       githubToken: args["github-token"],
       claudeCode: args["claude-code"],
+      diagnose: args.diagnose,
       showToken: args["show-token"],
       proxyEnv: args["proxy-env"],
     })

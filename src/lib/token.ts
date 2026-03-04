@@ -3,6 +3,7 @@ import fs from "node:fs/promises"
 
 import { PATHS } from "~/lib/paths"
 import { getCopilotToken } from "~/services/github/get-copilot-token"
+import { getCopilotUserInfo } from "~/services/github/get-copilot-user-info"
 import { getDeviceCode } from "~/services/github/get-device-code"
 import { getGitHubUser } from "~/services/github/get-user"
 import { pollAccessToken } from "~/services/github/poll-access-token"
@@ -12,10 +13,27 @@ import { state } from "./state"
 
 const readGithubToken = () => fs.readFile(PATHS.GITHUB_TOKEN_PATH, "utf8")
 
+let isRefreshing = false
+
 const writeGithubToken = (token: string) =>
   fs.writeFile(PATHS.GITHUB_TOKEN_PATH, token)
 
 export const setupCopilotToken = async () => {
+  try {
+    const userInfo = await getCopilotUserInfo()
+    if (userInfo.copilot_plan === "free") {
+      consola.error("⚠️  GitHub Copilot Free does not support API access")
+      consola.error(
+        "Please upgrade to Copilot Pro or Business to use this project",
+      )
+      consola.error("Visit: https://github.com/features/copilot")
+      process.exit(1)
+    }
+    consola.info(`Copilot plan: ${userInfo.copilot_plan}`)
+  } catch (error) {
+    consola.debug("Failed to get Copilot user info, continuing:", error)
+  }
+
   const { token, refresh_in } = await getCopilotToken()
   state.copilotToken = token
 
@@ -27,8 +45,14 @@ export const setupCopilotToken = async () => {
 
   const refreshInterval = (refresh_in - 60) * 1000
   setInterval(async () => {
-    consola.debug("Refreshing Copilot token")
+    if (isRefreshing) {
+      consola.debug("Token refresh already in progress, skipping")
+      return
+    }
+
+    isRefreshing = true
     try {
+      consola.debug("Refreshing Copilot token")
       const { token } = await getCopilotToken()
       state.copilotToken = token
       consola.debug("Copilot token refreshed")
@@ -37,7 +61,8 @@ export const setupCopilotToken = async () => {
       }
     } catch (error) {
       consola.error("Failed to refresh Copilot token:", error)
-      throw error
+    } finally {
+      isRefreshing = false
     }
   }, refreshInterval)
 }
