@@ -1,12 +1,11 @@
 {
   "name": "copilot-api",
-  "version": "0.15.1",
+  "version": "0.15.2",
   "keywords": [
     "proxy",
     "github-copilot",
     "openai-compatible"
   ],
-  "bugs": "https://github.com/Ritel-T/copilot-api/issues",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Ritel-T/copilot-api.git"
