@@ -30,12 +30,13 @@ interface RunServerOptions {
   proxyEnv: boolean
 }
 
+
+export async function runServer(options: RunServerOptions): Promise<void> {
   if (options.diagnose) {
     await runDiagnostics()
     process.exit(0)
   }
 
-export async function runServer(options: RunServerOptions): Promise<void> {
   if (options.proxyEnv) {
     initProxyFromEnv()
   }
@@ -191,12 +192,12 @@ export const start = defineCommand({
     "proxy-env": {
       type: "boolean",
       default: false,
+      description: "Initialize proxy from environment variables",
+    },
     diagnose: {
       type: "boolean",
       default: false,
       description: "Run diagnostics and display results",
-    },
-      description: "Initialize proxy from environment variables",
     },
   },
   run({ args }) {
