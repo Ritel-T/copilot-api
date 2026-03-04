@@ -65,6 +65,21 @@ async function fetchCopilotToken(
   return (await response.json()) as { token: string; refresh_in: number }
 }
 
+interface CopilotUserInfoResponse {
+  copilot_plan: string
+}
+
+async function fetchCopilotUserInfo(
+  st: State,
+): Promise<CopilotUserInfoResponse> {
+  const response = await fetch(`${GITHUB_API_BASE_URL}/copilot_internal/user`, {
+    headers: githubHeaders(st),
+  })
+  if (!response.ok)
+    throw new HTTPError("Failed to get Copilot user info", response)
+  return (await response.json()) as CopilotUserInfoResponse
+}
+
 async function fetchModels(st: State): Promise<ModelsResponse> {
   const response = await fetch(`${copilotBaseUrl(st)}/models`, {
     headers: copilotHeaders(st),
@@ -109,6 +124,33 @@ export async function startInstance(account: Account): Promise<void> {
 
   try {
     st.vsCodeVersion = await getVSCodeVersion()
+
+    // Check if this is a free account before attempting token fetch
+    try {
+      const userInfo = await fetchCopilotUserInfo(st)
+      if (userInfo.copilot_plan === "free") {
+        const errorMsg =
+          "GitHub Copilot Free does not support API access. Please upgrade to Copilot Pro or Business."
+        consola.error(`[${account.name}] ${errorMsg}`)
+        instance.status = "error"
+        instance.error = errorMsg
+        instances.set(account.id, instance)
+        await updateAccount(account.id, {
+          status: "error",
+          error: errorMsg,
+        }).catch(() => {})
+        throw new Error(errorMsg)
+      }
+      consola.info(`[${account.name}] Copilot plan: ${userInfo.copilot_plan}`)
+    } catch (error) {
+      // If we can't get user info, continue anyway (might be a transient error)
+      consola.debug(`[${account.name}] Could not verify plan, continuing...`)
+      consola.debug(
+        `[${account.name}] Error:`,
+        error instanceof Error ? error.message : String(error),
+      )
+    }
+
     await setupInstanceToken(instance)
     st.models = await fetchModels(st)
     instance.status = "running"

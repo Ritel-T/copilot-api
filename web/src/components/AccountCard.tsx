@@ -70,41 +70,64 @@ function QuotaBar({
 }
 
 function UsagePanel({ usage }: { usage: UsageData }) {
-  const q = usage.quota_snapshots
+const q = usage.quota_snapshots
   const t = useT()
+
+  // Guard against missing quota_snapshots (e.g., free accounts)
+  if (!q || !q.premium_interactions || !q.chat || !q.completions) {
+return (
+    <div
+        style={{
+          marginTop: "var(--space-md)",
+          padding: "var(--space-md)",
+          borderRadius: "var(--radius)",
+          background: "var(--bg-input)",
+          textAlign: "center",
+        }}
+      >
+        <div style={{ fontSize: 13, color: "var(--text-muted)" }}>
+          {t("plan")} <span className="text-mono">{usage.copilot_plan}</span>
+        </div>
+        <div style={{ fontSize: 12, color: "var(--red)", marginTop: "var(--space-sm)" }}>
+          ⚠️ {usage.copilot_plan === "free" ? "Free accounts do not support API access" : "Quota data unavailable"}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div
-      className="glass-panel"
-      style={{
-        marginTop: "var(--space-md)",
-        padding: "var(--space-md)",
-        borderRadius: "var(--radius)",
-      }}
-    >
-      <div
-        style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: "var(--space-sm)" }}
-      >
-        {t("plan")} <span className="text-mono">{usage.copilot_plan}</span> · {t("resets")} <span className="text-mono">{usage.quota_reset_date}</span>
-      </div>
-      <QuotaBar
-        label={t("premium")}
-        used={
-          q.premium_interactions.entitlement - q.premium_interactions.remaining
-        }
-        total={q.premium_interactions.entitlement}
-      />
-      <QuotaBar
-        label={t("chat")}
-        used={q.chat.entitlement - q.chat.remaining}
-        total={q.chat.entitlement}
-      />
-      <QuotaBar
-        label={t("completions")}
-        used={q.completions.entitlement - q.completions.remaining}
-        total={q.completions.entitlement}
-      />
-    </div>
-  )
+className="glass-panel"
+style={{
+marginTop: "var(--space-md)",
+padding: "var(--space-md)",
+borderRadius: "var(--radius)",
+}}
+>
+<div
+style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: "var(--space-sm)" }}
+>
+{t("plan")} <span className="text-mono">{usage.copilot_plan}</span> · {t("resets")} <span className="text-mono">{usage.quota_reset_date}</span>
+</div>
+<QuotaBar
+label={t("premium")}
+used={
+q.premium_interactions.entitlement - q.premium_interactions.remaining
+}
+total={q.premium_interactions.entitlement}
+/>
+<QuotaBar
+label={t("chat")}
+used={q.chat.entitlement - q.chat.remaining}
+total={q.chat.entitlement}
+/>
+<QuotaBar
+label={t("completions")}
+used={q.completions.entitlement - q.completions.remaining}
+total={q.completions.entitlement}
+/>
+</div>
+)
 }
 
 function useCopyFeedback(): [string | null, (text: string) => void] {
