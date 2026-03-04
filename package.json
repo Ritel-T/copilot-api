@@ -1,7 +1,6 @@
 {
   "name": "copilot-api",
-  "version": "0.15.1",
-  "keywords": [
+  "version": "0.15.2",
     "proxy",
     "github-copilot",
     "openai-compatible"
