@@ -1,3 +1,11 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable @typescript-eslint/no-unsafe-call */
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-argument */
+/* eslint-disable @typescript-eslint/no-unsafe-return */
+/* eslint-disable @typescript-eslint/no-unnecessary-condition */
+/* eslint-disable require-atomic-updates */
 import { describe, expect, it, spyOn, afterEach, beforeEach } from "bun:test"
 import consola from "consola"
 
@@ -14,16 +22,14 @@ describe("setupCopilotToken", () => {
   })
 
   afterEach(() => {
-    if (getCopilotTokenSpy) {
-      getCopilotTokenSpy.mockRestore()
-    }
+    getCopilotTokenSpy.mockRestore()
   })
 
   it("should refresh the token using setInterval and handle mutex", async () => {
     let callCount = 0
-    let resolveRefresh: (value: any) => void
-    const refreshPromise = new Promise((resolve) => {
-      resolveRefresh = resolve as any
+    let resolveRefresh: (value: unknown) => void
+    const refreshPromise = new Promise<unknown>((resolve) => {
+      resolveRefresh = resolve
     })
 
     getCopilotTokenSpy.mockImplementation(async () => {
@@ -46,8 +52,8 @@ describe("setupCopilotToken", () => {
 
     let intervalId: any
     const originalSetInterval = globalThis.setInterval
-    // @ts-expect-error - mocking setInterval
-    globalThis.setInterval = (cb: any, ms: number) => {
+    // @ts-expect-error - mocking setInterval for testing
+    globalThis.setInterval = (cb: () => void, ms: number) => {
       intervalId = originalSetInterval(cb, ms)
       return intervalId
     }
@@ -65,16 +71,15 @@ describe("setupCopilotToken", () => {
       expect(state.copilotToken).toBe("token1")
 
       // Signal refresh to finish
-      if (resolveRefresh!) {
-        resolveRefresh({})
-      }
+      resolveRefresh?.({})
 
       // Wait for async callback to complete
       await new Promise((resolve) => setTimeout(resolve, 50))
       expect(state.copilotToken).toBe("token2")
     } finally {
+      const savedIntervalId = intervalId
       globalThis.setInterval = originalSetInterval
-      if (intervalId) clearInterval(intervalId)
+      if (savedIntervalId) clearInterval(savedIntervalId)
     }
   })
 
@@ -82,6 +87,7 @@ describe("setupCopilotToken", () => {
     const consolaErrorSpy = spyOn(consola, "error").mockImplementation(() => {})
 
     let callCount = 0
+    // eslint-disable-next-line @typescript-eslint/require-await
     getCopilotTokenSpy.mockImplementation(async () => {
       callCount++
       if (callCount === 1) {
@@ -96,8 +102,8 @@ describe("setupCopilotToken", () => {
 
     let intervalId: any
     const originalSetInterval = globalThis.setInterval
-    // @ts-expect-error - mocking setInterval
-    globalThis.setInterval = (cb: any, ms: number) => {
+    // @ts-expect-error - mocking setInterval for testing
+    globalThis.setInterval = (cb: () => void, ms: number) => {
       intervalId = originalSetInterval(cb, ms)
       return intervalId
     }
@@ -113,8 +119,9 @@ describe("setupCopilotToken", () => {
       expect(consolaErrorSpy).toHaveBeenCalled()
       expect(state.copilotToken).toBe("token1")
     } finally {
+      const savedIntervalId = intervalId
       globalThis.setInterval = originalSetInterval
-      if (intervalId) clearInterval(intervalId)
+      if (savedIntervalId) clearInterval(savedIntervalId)
       consolaErrorSpy.mockRestore()
     }
   })

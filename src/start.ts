@@ -6,14 +6,14 @@ import consola from "consola"
 import { serve, type ServerHandler } from "srvx"
 import invariant from "tiny-invariant"
 
-import { ensurePaths } from "./lib/paths"
 import { getDeviceId } from "./lib/device-id"
+import { runDiagnostics } from "./lib/diagnostics"
+import { ensurePaths } from "./lib/paths"
 import { initProxyFromEnv } from "./lib/proxy"
 import { generateEnvScript } from "./lib/shell"
 import { state } from "./lib/state"
 import { setupCopilotToken, setupGitHubToken } from "./lib/token"
 import { cacheModels, cacheVSCodeVersion } from "./lib/utils"
-import { runDiagnostics } from "./lib/diagnostics"
 import { server } from "./server"
 
 interface RunServerOptions {
@@ -29,7 +29,6 @@ interface RunServerOptions {
   diagnose: boolean
   proxyEnv: boolean
 }
-
 
 export async function runServer(options: RunServerOptions): Promise<void> {
   if (options.diagnose) {

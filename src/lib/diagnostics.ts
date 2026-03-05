@@ -1,6 +1,80 @@
 import { GITHUB_API_BASE_URL, githubHeaders } from "~/lib/api-config"
 import { state } from "~/lib/state"
+
 import { getCopilotUserInfo } from "../services/github/get-copilot-user-info"
+
+interface GitHubUserResponse {
+  login: string
+}
+
+async function checkGitHubConnectivity(): Promise<{
+  reachable: boolean
+  latencyMs: number
+}> {
+  const startTime = Date.now()
+  try {
+    const response = await fetch(`${GITHUB_API_BASE_URL}/rate_limit`)
+    return { reachable: response.ok, latencyMs: Date.now() - startTime }
+  } catch {
+    return { reachable: false, latencyMs: Date.now() - startTime }
+  }
+}
+
+async function checkGitHubAuth(): Promise<{
+  loggedIn: boolean
+  username: string | null
+}> {
+  if (!state.githubToken) {
+    return { loggedIn: false, username: null }
+  }
+
+  try {
+    const response = await fetch(`${GITHUB_API_BASE_URL}/user`, {
+      headers: githubHeaders(state),
+    })
+    if (!response.ok) {
+      return { loggedIn: false, username: null }
+    }
+    const data = (await response.json()) as GitHubUserResponse
+    return { loggedIn: true, username: data.login }
+  } catch {
+    return { loggedIn: false, username: null }
+  }
+}
+
+async function checkTokenValidity(): Promise<boolean> {
+  if (!state.githubToken) {
+    return false
+  }
+
+  try {
+    const response = await fetch(`${GITHUB_API_BASE_URL}/user`, {
+      headers: githubHeaders(state),
+    })
+    return response.ok
+  } catch {
+    return false
+  }
+}
+
+async function getCopilotInfo(): Promise<{
+  plan: string
+  chatPercent?: number
+  completionsPercent?: number
+}> {
+  try {
+    const info = await getCopilotUserInfo()
+    const plan = info.copilot_plan
+    const quotas = info.quota_snapshots
+    return {
+      plan,
+      chatPercent: quotas?.chat?.percent_remaining,
+      completionsPercent: quotas?.completions?.percent_remaining,
+    }
+  } catch {
+    return { plan: "unknown" }
+  }
+}
 
 // Lightweight diagnostics runner for Copilot API startup checks.
 export const runDiagnostics = async (): Promise<void> => {
@@ -11,45 +85,21 @@ export const runDiagnostics = async (): Promise<void> => {
   console.log("")
 
   // 1) Network connectivity to GitHub API
-  const tStartGitHub = Date.now()
-  let githubReachable = false
-  let githubMs = 0
-  try {
-    const resp = await fetch(`${GITHUB_API_BASE_URL}/rate_limit`)
-    githubReachable = resp.ok
-    githubMs = Date.now() - tStartGitHub
-  } catch {
-    githubMs = Date.now() - tStartGitHub
-    githubReachable = false
-  }
+  const github = await checkGitHubConnectivity()
   console.log("📡 Network Connectivity")
-  console.log(`  ${githubReachable ? "✅" : "❌"} GitHub API: ${githubMs}ms`)
-  // Copilot API connectivity is environment/server dependent; mark as N/A at startup
+  console.log(
+    `  ${github.reachable ? "✅" : "❌"} GitHub API: ${github.latencyMs}ms`,
+  )
   console.log("  ✅ Copilot API: N/A")
 
   // 2) GitHub authentication status (if token provided)
   console.log("")
   console.log("🔐 GitHub Authentication")
-  if (state.githubToken) {
-    let loggedInUser: string | null = null
-    let tokenOk = false
-    try {
-      const resp = await fetch(`${GITHUB_API_BASE_URL}/user`, {
-        headers: githubHeaders(state),
-      })
-      tokenOk = resp.ok
-    if (resp.ok) {
-        const data: any = await resp.json()
-        loggedInUser = data?.login ?? null
-      }
-    } catch {
-      tokenOk = false
-    }
-    if (tokenOk && loggedInUser) {
-      console.log(`  ✅ Logged in as: ${loggedInUser}`)
-    } else {
-      console.log("  ❌ GitHub token provided but authentication failed")
-    }
+  const auth = await checkGitHubAuth()
+  if (auth.loggedIn && auth.username) {
+    console.log(`  ✅ Logged in as: ${auth.username}`)
+  } else if (state.githubToken) {
+    console.log("  ❌ GitHub token provided but authentication failed")
   } else {
     console.log("  ❌ No GitHub token provided")
   }
@@ -57,35 +107,23 @@ export const runDiagnostics = async (): Promise<void> => {
   // 3) Copilot subscription / plan info
   console.log("")
   console.log("💼 Copilot Subscription")
-  try {
-    const info = await getCopilotUserInfo()
-    const plan = info.copilot_plan ?? "unknown"
-    console.log(`  Plan: ${plan}`)
-    const quotas = info.quota_snapshots
-    if (quotas?.chat?.percent_remaining !== undefined) {
-      console.log(`  Chat quota: ${quotas.chat.percent_remaining}% remaining`)
-    }
-    if (quotas?.completions?.percent_remaining !== undefined) {
-      console.log(`  Completions quota: ${quotas.completions.percent_remaining}% remaining`)
-    }
-  } catch {
-    console.log("  Plan: unknown")
+  const copilotInfo = await getCopilotInfo()
+  console.log(`  Plan: ${copilotInfo.plan}`)
+  if (copilotInfo.chatPercent !== undefined) {
+    console.log(`  Chat quota: ${copilotInfo.chatPercent}% remaining`)
+  }
+  if (copilotInfo.completionsPercent !== undefined) {
+    console.log(
+      `  Completions quota: ${copilotInfo.completionsPercent}% remaining`,
+    )
   }
 
   // 4) Token status
   console.log("")
   console.log("🎫 Token Status")
+  const tokenValid = await checkTokenValidity()
   if (state.githubToken) {
-    let valid = false
-    try {
-      const resp = await fetch(`${GITHUB_API_BASE_URL}/user`, {
-        headers: githubHeaders(state),
-      })
-      valid = resp.ok
-    } catch {
-      valid = false
-    }
-    if (valid) {
+    if (tokenValid) {
       console.log("  ✅ Valid (expires in unknown)")
     } else {
       console.log("  ❌ Invalid")

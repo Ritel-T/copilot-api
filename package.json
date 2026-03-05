@@ -1,6 +1,7 @@
 {
   "name": "copilot-api",
-  "version": "0.15.3",
+  "version": "0.15.5",
+  "description": "A reverse-engineered proxy for GitHub Copilot API that exposes it as an OpenAI and Anthropic compatible service",
   "keywords": [
     "proxy",
     "github-copilot",

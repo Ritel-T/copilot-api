@@ -4,6 +4,7 @@ import fs from "node:fs/promises"
 import { PATHS } from "./paths"
 
 let cachedDeviceId: string | null = null
+let initPromise: Promise<string> | null = null
 const sessionId = randomUUID()
 
 /**
@@ -11,14 +12,27 @@ const sessionId = randomUUID()
  * The device ID is stable across process restarts.
  */
 export async function getDeviceId(): Promise<string> {
+  // If already initialized, return cached value
   if (cachedDeviceId) {
     return cachedDeviceId
   }
 
+  // If initialization is in progress, wait for it
+  if (initPromise) {
+    return initPromise
+  }
+
+  // Start initialization
+  initPromise = initDeviceId()
+  return initPromise
+}
+
+async function initDeviceId(): Promise<string> {
   try {
     const data = await fs.readFile(PATHS.DEVICE_ID_PATH, "utf8")
-    cachedDeviceId = data.trim()
-    if (cachedDeviceId) {
+    const existingId = data.trim()
+    if (existingId) {
+      cachedDeviceId = existingId
       return cachedDeviceId
     }
   } catch {
@@ -32,18 +46,18 @@ export async function getDeviceId(): Promise<string> {
     cachedDeviceId = newId
   } catch {
     // If we can't write, just return the generated ID for this session
-    return newId
+    cachedDeviceId = newId
   }
 
-  return newId
+  return cachedDeviceId
 }
+
 /**
  * Get the device ID synchronously. Returns null if not yet initialized.
  */
 export function getDeviceIdSync(): string | null {
   return cachedDeviceId
 }
-
 
 /**
  * Get the session ID, which is unique per process start.

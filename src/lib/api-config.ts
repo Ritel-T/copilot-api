@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto"
-import { getDeviceIdSync, getSessionId } from "./device-id"
 
 import type { State } from "./state"
+
+import { getDeviceIdSync, getSessionId } from "./device-id"
 
 export const standardHeaders = () => ({
   "content-type": "application/json",

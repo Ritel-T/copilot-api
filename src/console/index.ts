@@ -16,12 +16,14 @@ import {
   completionsHandler,
   countTokensHandler,
   embeddingsHandler,
+  getInstanceUsage,
   getInstanceState,
   messagesHandler,
   modelsHandler,
   startInstance,
 } from "./instance-manager"
 import { selectAccount } from "./load-balancer"
+import { setCachedUsage } from "./usage-cache"
 
 const MIME_TYPES: Record<string, string> = {
   ".html": "text/html",
@@ -321,6 +323,27 @@ function logRequest(
     inputTokens: null,
     outputTokens: null,
   })
+
+  // Update quota cache asynchronously after successful request
+  const accountId = c.get("proxyAccountId") as string
+  if (accountId && response.status < 400) {
+    void updateQuotaCache(accountId)
+  }
+}
+
+/**
+ * Update quota cache for an account after a request.
+ * This is called asynchronously to avoid blocking the response.
+ */
+async function updateQuotaCache(accountId: string): Promise<void> {
+  try {
+    const usage = await getInstanceUsage(accountId)
+    if (usage) {
+      await setCachedUsage(accountId, usage)
+    }
+  } catch {
+    // Ignore errors - cache update is best-effort
+  }
 }
 
 function isRetryableStatus(status: number): boolean {

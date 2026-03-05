@@ -62,6 +62,7 @@ export const setupCopilotToken = async () => {
     } catch (error) {
       consola.error("Failed to refresh Copilot token:", error)
     } finally {
+      // eslint-disable-next-line require-atomic-updates
       isRefreshing = false
     }
   }, refreshInterval)

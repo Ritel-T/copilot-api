@@ -12,14 +12,24 @@ export function getRunningAccounts(accounts: Array<Account>): Array<Account> {
 interface QuotaSnapshot {
   entitlement: number
   remaining: number
+  quota_remaining?: number
+  percent_remaining?: number
 }
 
 interface CachedUsage {
-  quota_snapshots: {
-    premium_interactions: QuotaSnapshot
-    chat: QuotaSnapshot
-    completions: QuotaSnapshot
+  quota_snapshots?: {
+    premium_interactions?: QuotaSnapshot
+    chat?: QuotaSnapshot
+    completions?: QuotaSnapshot
   }
+}
+
+/** Calculate remaining quota percentage */
+function calcRemaining(snapshot: QuotaSnapshot): number {
+  const remaining = snapshot.quota_remaining ?? snapshot.remaining
+  const entitlement = snapshot.entitlement
+  if (entitlement === 0) return 0
+  return remaining / entitlement
 }
 
 export async function selectAccount(
@@ -54,12 +64,15 @@ export async function selectAccount(
           return { account, score: -1 } // No quota data, lowest priority
         }
         const q = cached.usage.quota_snapshots
+        // Validate quota_snapshots exists and has all required fields
+        if (!q || !q.premium_interactions || !q.chat || !q.completions) {
+          return { account, score: -1 } // Incomplete quota data
+        }
         // Calculate remaining quota percentage (average of all three quotas)
-        const premiumRemaining =
-          q.premium_interactions.remaining / q.premium_interactions.entitlement
-        const chatRemaining = q.chat.remaining / q.chat.entitlement
-        const compRemaining =
-          q.completions.remaining / q.completions.entitlement
+        // Use quota_remaining if available, otherwise fall back to remaining
+        const premiumRemaining = calcRemaining(q.premium_interactions)
+        const chatRemaining = calcRemaining(q.chat)
+        const compRemaining = calcRemaining(q.completions)
         const avgRemaining =
           (premiumRemaining + chatRemaining + compRemaining) / 3
         return { account, score: avgRemaining }
