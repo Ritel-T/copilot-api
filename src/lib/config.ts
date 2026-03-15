@@ -16,6 +16,7 @@ export interface AppConfig {
   >
   useFunctionApplyPatch?: boolean
   compactUseSmallModel?: boolean
+  useMessagesApi?: boolean
 }
 
 const gpt5ExplorationPrompt = `## Exploration and reading files
@@ -62,6 +63,7 @@ const defaultConfig: AppConfig = {
   },
   useFunctionApplyPatch: true,
   compactUseSmallModel: true,
+  useMessagesApi: true,
 }
 
 let cachedConfig: AppConfig | null = null
@@ -204,4 +206,9 @@ export function getReasoningEffortForModel(
 export function shouldCompactUseSmallModel(): boolean {
   const config = getConfig()
   return config.compactUseSmallModel ?? true
+}
+
+export function isMessagesApiEnabled(): boolean {
+  const config = getConfig()
+  return config.useMessagesApi ?? true
 }
