@@ -133,7 +133,7 @@ function mountProxyRoutes(app: Hono): void {
 }
 
 async function mountStaticFiles(app: Hono): Promise<void> {
-  const webDistPath = path.resolve(import.meta.dirname, "../../web/dist")
+  const webDistPath = path.resolve(import.meta.dirname, "../web/dist")
 
   let hasWebDist = false
   try {
