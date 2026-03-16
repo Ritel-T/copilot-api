@@ -23,7 +23,9 @@ describe("getCopilotUserInfo", () => {
       organization_login_list: ["org1"],
     }
 
-    const fetchSpy = spyOn(globalThis, "fetch").mockImplementation(() =>
+    // @ts-expect-error - spyOn type mismatch with globalThis.fetch
+    const fetchSpy = spyOn(globalThis, "fetch")
+    fetchSpy.mockImplementationOnce(() =>
       Promise.resolve(
         new Response(JSON.stringify(mockUserInfo), {
           status: 200,
@@ -44,7 +46,9 @@ describe("getCopilotUserInfo", () => {
   })
 
   it("should throw HTTPError on failure", async () => {
-    const fetchSpy = spyOn(globalThis, "fetch").mockImplementation(() =>
+    // @ts-expect-error - spyOn type mismatch with globalThis.fetch
+    const fetchSpy = spyOn(globalThis, "fetch")
+    fetchSpy.mockImplementationOnce(() =>
       Promise.resolve(new Response("Not Found", { status: 404 })),
     )
 

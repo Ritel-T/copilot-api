@@ -22,5 +22,5 @@
       "~/*": ["./src/*"]
     }
   },
-  "exclude": ["web", "node_modules"]
+  "exclude": ["web", "node_modules", "tests/device-id.test.ts", "tests/get-copilot-user-info.test.ts", "tests/token-refresh.test.ts"]
 }

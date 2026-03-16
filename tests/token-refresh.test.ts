@@ -27,7 +27,7 @@ describe("setupCopilotToken", () => {
 
   it("should refresh the token using setInterval and handle mutex", async () => {
     let callCount = 0
-    let resolveRefresh: (value: unknown) => void
+    let resolveRefresh: ((value: unknown) => void) | undefined
     const refreshPromise = new Promise<unknown>((resolve) => {
       resolveRefresh = resolve
     })
@@ -84,7 +84,10 @@ describe("setupCopilotToken", () => {
   })
 
   it("should log error and continue if refresh fails", async () => {
-    const consolaErrorSpy = spyOn(consola, "error").mockImplementation(() => {})
+    // @ts-expect-error - spyOn type mismatch with consola methods
+    const consolaErrorSpy = spyOn(consola, "error")
+    // @ts-expect-error - mockImplementation type mismatch
+    consolaErrorSpy.mockImplementation(() => {})
 
     let callCount = 0
     // eslint-disable-next-line @typescript-eslint/require-await

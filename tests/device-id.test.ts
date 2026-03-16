@@ -15,13 +15,11 @@ describe("device-id", () => {
 
   beforeEach(() => {
     // Override PATHS for testing persistence
-    // @ts-expect-error - test-only override
     PATHS.DEVICE_ID_PATH = TEST_DEVICE_ID_PATH
   })
 
   afterEach(async () => {
     // Restore and cleanup
-    // @ts-expect-error - test-only override
     PATHS.DEVICE_ID_PATH = ORIGINAL_DEVICE_ID_PATH
     await fs.unlink(TEST_DEVICE_ID_PATH).catch(() => {
       // Ignore if file doesn't exist
