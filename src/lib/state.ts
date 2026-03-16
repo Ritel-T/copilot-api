@@ -8,6 +8,9 @@ export interface State {
   models?: ModelsResponse
   vsCodeVersion?: string
 
+  macMachineId?: string
+  vsCodeSessionId?: string
+
   manualApprove: boolean
   rateLimitWait: boolean
   showToken: boolean
@@ -15,6 +18,7 @@ export interface State {
   // Rate limiting configuration
   rateLimitSeconds?: number
   lastRequestTimestamp?: number
+  verbose: boolean
 }
 
 export const state: State = {
@@ -22,4 +26,5 @@ export const state: State = {
   manualApprove: false,
   rateLimitWait: false,
   showToken: false,
+  verbose: false,
 }

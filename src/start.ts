@@ -6,6 +6,7 @@ import consola from "consola"
 import { serve, type ServerHandler } from "srvx"
 import invariant from "tiny-invariant"
 
+import { mergeConfigWithDefaults } from "./lib/config"
 import { getDeviceId } from "./lib/device-id"
 import { runDiagnostics } from "./lib/diagnostics"
 import { ensurePaths } from "./lib/paths"
@@ -13,8 +14,12 @@ import { initProxyFromEnv } from "./lib/proxy"
 import { generateEnvScript } from "./lib/shell"
 import { state } from "./lib/state"
 import { setupCopilotToken, setupGitHubToken } from "./lib/token"
-import { cacheModels, cacheVSCodeVersion } from "./lib/utils"
-import { server } from "./server"
+import {
+  cacheMacMachineId,
+  cacheModels,
+  cacheVSCodeVersion,
+  cacheVsCodeSessionId,
+} from "./lib/utils"
 
 interface RunServerOptions {
   port: number
@@ -36,10 +41,14 @@ export async function runServer(options: RunServerOptions): Promise<void> {
     process.exit(0)
   }
 
+  // Ensure config is merged with defaults at startup
+  mergeConfigWithDefaults()
+
   if (options.proxyEnv) {
     initProxyFromEnv()
   }
 
+  state.verbose = options.verbose
   if (options.verbose) {
     consola.level = 5
     consola.info("Verbose logging enabled")
@@ -58,6 +67,8 @@ export async function runServer(options: RunServerOptions): Promise<void> {
   await ensurePaths()
   await cacheVSCodeVersion()
   await getDeviceId()
+  cacheMacMachineId()
+  cacheVsCodeSessionId()
 
   if (options.githubToken) {
     state.githubToken = options.githubToken
@@ -120,12 +131,17 @@ export async function runServer(options: RunServerOptions): Promise<void> {
   }
 
   consola.box(
-    `🌐 Usage Viewer: https://ericc-ch.github.io/copilot-api?endpoint=${serverUrl}/usage`,
+    `🌐 Usage Viewer: ${serverUrl}/usage-viewer?endpoint=${serverUrl}/usage`,
   )
+
+  const { server } = await import("./server")
 
   serve({
     fetch: server.fetch as ServerHandler,
     port: options.port,
+    bun: {
+      idleTimeout: 0,
+    },
   })
 }
 

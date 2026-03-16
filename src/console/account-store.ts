@@ -38,7 +38,7 @@ function generateApiKey(): string {
 async function readStore(): Promise<AccountStore> {
   try {
     const data = await fs.readFile(STORE_PATH)
-    return JSON.parse(data) as AccountStore
+    return JSON.parse(data.toString()) as AccountStore
   } catch {
     return { accounts: [] }
   }

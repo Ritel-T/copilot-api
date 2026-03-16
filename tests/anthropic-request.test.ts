@@ -136,7 +136,7 @@ describe("Anthropic to OpenAI translation logic", () => {
             {
               type: "thinking",
               thinking: "Let me think about this simple math problem...",
-              signature: "claude-signature-123",
+              signature: "abc123",
             },
             { type: "text", text: "2+2 equals 4." },
           ],
@@ -147,7 +147,7 @@ describe("Anthropic to OpenAI translation logic", () => {
     const openAIPayload = translateToOpenAI(anthropicPayload)
     expect(isValidChatCompletionRequest(openAIPayload)).toBe(true)
 
-    // Check that thinking content is in reasoning_text field
+    // Check that thinking content is combined with text content
     const assistantMessage = openAIPayload.messages.find(
       (m) => m.role === "assistant",
     )
@@ -169,7 +169,7 @@ describe("Anthropic to OpenAI translation logic", () => {
               type: "thinking",
               thinking:
                 "I need to call the weather API to get current weather information.",
-              signature: "claude-signature-456",
+              signature: "def456",
             },
             { type: "text", text: "I'll check the weather for you." },
             {
@@ -186,7 +186,7 @@ describe("Anthropic to OpenAI translation logic", () => {
     const openAIPayload = translateToOpenAI(anthropicPayload)
     expect(isValidChatCompletionRequest(openAIPayload)).toBe(true)
 
-    // Check that thinking content is in reasoning_text field
+    // Check that thinking content is included in the message content
     const assistantMessage = openAIPayload.messages.find(
       (m) => m.role === "assistant",
     )

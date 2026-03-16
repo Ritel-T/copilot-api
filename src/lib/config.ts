@@ -7,14 +7,39 @@ export interface AppConfig {
   auth?: {
     apiKeys?: Array<string>
   }
+  providers?: Record<string, ProviderConfig>
   extraPrompts?: Record<string, string>
   smallModel?: string
+  responsesApiContextManagementModels?: Array<string>
   modelReasoningEfforts?: Record<
     string,
     "none" | "minimal" | "low" | "medium" | "high" | "xhigh"
   >
   useFunctionApplyPatch?: boolean
   compactUseSmallModel?: boolean
+  useMessagesApi?: boolean
+}
+
+export interface ModelConfig {
+  temperature?: number
+  topP?: number
+  topK?: number
+}
+
+export interface ProviderConfig {
+  type?: string
+  enabled?: boolean
+  baseUrl?: string
+  apiKey?: string
+  models?: Record<string, ModelConfig>
+}
+
+export interface ResolvedProviderConfig {
+  name: string
+  type: "anthropic"
+  baseUrl: string
+  apiKey: string
+  models?: Record<string, ModelConfig>
 }
 
 const gpt5ExplorationPrompt = `## Exploration and reading files
@@ -48,17 +73,22 @@ const defaultConfig: AppConfig = {
   auth: {
     apiKeys: [],
   },
+  providers: {},
   extraPrompts: {
     "gpt-5-mini": gpt5ExplorationPrompt,
-    "gpt-5.1-codex-max": gpt5ExplorationPrompt,
     "gpt-5.3-codex": gpt5CommentaryPrompt,
+    "gpt-5.4": gpt5CommentaryPrompt,
   },
   smallModel: "gpt-5-mini",
+  responsesApiContextManagementModels: [],
   modelReasoningEfforts: {
     "gpt-5-mini": "low",
+    "gpt-5.3-codex": "xhigh",
+    "gpt-5.4": "xhigh",
   },
   useFunctionApplyPatch: true,
   compactUseSmallModel: true,
+  useMessagesApi: true,
 }
 
 let cachedConfig: AppConfig | null = null
@@ -100,18 +130,27 @@ function readConfigFromDisk(): AppConfig {
   }
 }
 
-function mergeDefaultExtraPrompts(config: AppConfig): {
+function mergeDefaultConfig(config: AppConfig): {
   mergedConfig: AppConfig
   changed: boolean
 } {
   const extraPrompts = config.extraPrompts ?? {}
   const defaultExtraPrompts = defaultConfig.extraPrompts ?? {}
+  const modelReasoningEfforts = config.modelReasoningEfforts ?? {}
+  const defaultModelReasoningEfforts = defaultConfig.modelReasoningEfforts ?? {}
 
   const missingExtraPromptModels = Object.keys(defaultExtraPrompts).filter(
     (model) => !Object.hasOwn(extraPrompts, model),
   )
 
-  if (missingExtraPromptModels.length === 0) {
+  const missingReasoningEffortModels = Object.keys(
+    defaultModelReasoningEfforts,
+  ).filter((model) => !Object.hasOwn(modelReasoningEfforts, model))
+
+  const hasExtraPromptChanges = missingExtraPromptModels.length > 0
+  const hasReasoningEffortChanges = missingReasoningEffortModels.length > 0
+
+  if (!hasExtraPromptChanges && !hasReasoningEffortChanges) {
     return { mergedConfig: config, changed: false }
   }
 
@@ -122,6 +161,10 @@ function mergeDefaultExtraPrompts(config: AppConfig): {
         ...defaultExtraPrompts,
         ...extraPrompts,
       },
+      modelReasoningEfforts: {
+        ...defaultModelReasoningEfforts,
+        ...modelReasoningEfforts,
+      },
     },
     changed: true,
   }
@@ -129,7 +172,7 @@ function mergeDefaultExtraPrompts(config: AppConfig): {
 
 export function mergeConfigWithDefaults(): AppConfig {
   const config = readConfigFromDisk()
-  const { mergedConfig, changed } = mergeDefaultExtraPrompts(config)
+  const { mergedConfig, changed } = mergeDefaultConfig(config)
 
   if (changed) {
     try {
@@ -165,6 +208,19 @@ export function getSmallModel(): string {
   return config.smallModel ?? "gpt-5-mini"
 }
 
+export function getResponsesApiContextManagementModels(): Array<string> {
+  const config = getConfig()
+  return (
+    config.responsesApiContextManagementModels
+    ?? defaultConfig.responsesApiContextManagementModels
+    ?? []
+  )
+}
+
+export function isResponsesApiContextManagementModel(model: string): boolean {
+  return getResponsesApiContextManagementModels().includes(model)
+}
+
 export function getReasoningEffortForModel(
   model: string,
 ): "none" | "minimal" | "low" | "medium" | "high" | "xhigh" {
@@ -175,4 +231,61 @@ export function getReasoningEffortForModel(
 export function shouldCompactUseSmallModel(): boolean {
   const config = getConfig()
   return config.compactUseSmallModel ?? true
+}
+
+export function normalizeProviderBaseUrl(url: string): string {
+  return url.trim().replace(/\/+$/u, "")
+}
+
+export function getProviderConfig(name: string): ResolvedProviderConfig | null {
+  const providerName = name.trim()
+  if (!providerName) {
+    return null
+  }
+
+  const config = getConfig()
+  const provider = config.providers?.[providerName]
+  if (!provider) {
+    return null
+  }
+
+  if (provider.enabled === false) {
+    return null
+  }
+
+  const type = provider.type ?? "anthropic"
+  if (type !== "anthropic") {
+    consola.warn(
+      `Provider ${providerName} is ignored because only anthropic type is supported`,
+    )
+    return null
+  }
+
+  const baseUrl = normalizeProviderBaseUrl(provider.baseUrl ?? "")
+  const apiKey = (provider.apiKey ?? "").trim()
+  if (!baseUrl || !apiKey) {
+    consola.warn(
+      `Provider ${providerName} is enabled but missing baseUrl or apiKey`,
+    )
+    return null
+  }
+
+  return {
+    name: providerName,
+    type,
+    baseUrl,
+    apiKey,
+    models: provider.models,
+  }
+}
+
+export function listEnabledProviders(): Array<string> {
+  const config = getConfig()
+  const providerNames = Object.keys(config.providers ?? {})
+  return providerNames.filter((name) => getProviderConfig(name) !== null)
+}
+
+export function isMessagesApiEnabled(): boolean {
+  const config = getConfig()
+  return config.useMessagesApi ?? true
 }

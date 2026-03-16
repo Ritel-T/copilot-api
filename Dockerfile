@@ -1,39 +1,26 @@
-# Stage 1: Build frontend
-FROM node:22-alpine AS web-builder
-WORKDIR /app/web
-
-COPY web/package.json ./
-RUN npm install
-
-COPY web/ ./
-RUN npm run build
-
-# Stage 2: Build backend
 FROM oven/bun:1.2.19-alpine AS builder
 WORKDIR /app
 
-COPY package.json bun.lock ./
+COPY ./package.json ./bun.lock ./
 RUN bun install --frozen-lockfile
 
 COPY . .
+RUN bun run build
 
-# Stage 3: Runtime
-FROM oven/bun:1.2.19-alpine
+FROM oven/bun:1.2.19-alpine AS runner
 WORKDIR /app
 
-COPY package.json bun.lock ./
+COPY ./package.json ./bun.lock ./
 RUN bun install --frozen-lockfile --production --ignore-scripts --no-cache
 
-COPY --from=builder /app/src ./src
-COPY --from=builder /app/tsconfig.json ./
-COPY --from=web-builder /app/web/dist ./web/dist
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/pages ./pages
 
-EXPOSE 3000 4141
+EXPOSE 4141
 
-VOLUME /root/.local/share/copilot-api
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD wget --spider -q http://localhost:4141/ || exit 1
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD wget --spider -q http://localhost:3000/api/config || exit 1
-
-ENTRYPOINT ["bun", "run", "./src/main.ts", "console"]
-CMD ["--web-port", "3000", "--proxy-port", "4141"]
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]

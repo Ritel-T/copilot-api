@@ -2,9 +2,17 @@ import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 
-const APP_DIR = path.join(os.homedir(), ".local", "share", "copilot-api")
+const AUTH_APP = process.env.COPILOT_API_OAUTH_APP?.trim() || ""
+const ENTERPRISE_PREFIX = process.env.COPILOT_API_ENTERPRISE_URL ? "ent_" : ""
 
-const GITHUB_TOKEN_PATH = path.join(APP_DIR, "github_token")
+const DEFAULT_DIR = path.join(os.homedir(), ".local", "share", "copilot-api")
+const APP_DIR = process.env.COPILOT_API_HOME || DEFAULT_DIR
+
+const GITHUB_TOKEN_PATH = path.join(
+  APP_DIR,
+  AUTH_APP,
+  ENTERPRISE_PREFIX + "github_token",
+)
 const CONFIG_PATH = path.join(APP_DIR, "config.json")
 
 export const PATHS = {
@@ -17,7 +25,7 @@ export const PATHS = {
 }
 
 export async function ensurePaths(): Promise<void> {
-  await fs.mkdir(PATHS.APP_DIR, { recursive: true })
+  await fs.mkdir(path.join(PATHS.APP_DIR, AUTH_APP), { recursive: true })
   await ensureFile(PATHS.GITHUB_TOKEN_PATH)
   await ensureFile(PATHS.CONFIG_PATH)
   await fs.mkdir(PATHS.REQUEST_LOG_DIR, { recursive: true })

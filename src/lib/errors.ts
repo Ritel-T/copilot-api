@@ -1,24 +1,27 @@
-export enum CopilotErrorCode {
-  AUTH_GITHUB_TOKEN_INVALID = "AUTH_GITHUB_TOKEN_INVALID",
-  AUTH_COPILOT_TOKEN_EXPIRED = "AUTH_COPILOT_TOKEN_EXPIRED",
-  PERMISSION_INSUFFICIENT = "PERMISSION_INSUFFICIENT",
-  PERMISSION_RATE_LIMITED = "PERMISSION_RATE_LIMITED",
-  PERMISSION_FREE_PLAN = "PERMISSION_FREE_PLAN",
-  NETWORK_TIMEOUT = "NETWORK_TIMEOUT",
-  NETWORK_CONNECTION_FAILED = "NETWORK_CONNECTION_FAILED",
-  API_MODEL_NOT_FOUND = "API_MODEL_NOT_FOUND",
-  API_INVALID_REQUEST = "API_INVALID_REQUEST",
-  UNKNOWN = "UNKNOWN",
-}
+export const CopilotErrorCode = {
+  AUTH_GITHUB_TOKEN_INVALID: "AUTH_GITHUB_TOKEN_INVALID",
+  AUTH_COPILOT_TOKEN_EXPIRED: "AUTH_COPILOT_TOKEN_EXPIRED",
+  PERMISSION_INSUFFICIENT: "PERMISSION_INSUFFICIENT",
+  PERMISSION_RATE_LIMITED: "PERMISSION_RATE_LIMITED",
+  PERMISSION_FREE_PLAN: "PERMISSION_FREE_PLAN",
+  NETWORK_TIMEOUT: "NETWORK_TIMEOUT",
+  NETWORK_CONNECTION_FAILED: "NETWORK_CONNECTION_FAILED",
+  API_MODEL_NOT_FOUND: "API_MODEL_NOT_FOUND",
+  API_INVALID_REQUEST: "API_INVALID_REQUEST",
+  UNKNOWN: "UNKNOWN",
+} as const
+
+export type CopilotErrorCodeType =
+  (typeof CopilotErrorCode)[keyof typeof CopilotErrorCode]
 
 export class CopilotError extends Error {
-  code: CopilotErrorCode
+  code: CopilotErrorCodeType
   httpStatus?: number
   httpHeaders?: Headers
 
   constructor(
     message: string,
-    code: CopilotErrorCode = CopilotErrorCode.UNKNOWN,
+    code: CopilotErrorCodeType = CopilotErrorCode.UNKNOWN,
     options?: { httpStatus?: number; httpHeaders?: Headers },
   ) {
     super(message)
@@ -31,7 +34,7 @@ export class CopilotError extends Error {
   static fromHTTPError(response: Response, message?: string): CopilotError {
     const status = response.status
     const headers = response.headers
-    let code = CopilotErrorCode.UNKNOWN
+    let code: CopilotErrorCodeType = CopilotErrorCode.UNKNOWN
 
     switch (status) {
       case 401: {

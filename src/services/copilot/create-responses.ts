@@ -1,22 +1,15 @@
-import type { SSEMessage } from "hono/streaming"
-
 import consola from "consola"
 import { events } from "fetch-event-stream"
-import { randomUUID } from "node:crypto"
 
-import type { State } from "~/lib/state"
+import type { SubagentMarker } from "~/routes/messages/subagent-marker"
 
-import { copilotBaseUrl, copilotHeaders } from "~/lib/api-config"
+import {
+  copilotBaseUrl,
+  copilotHeaders,
+  prepareInteractionHeaders,
+} from "~/lib/api-config"
 import { HTTPError } from "~/lib/error"
-import { state as globalState } from "~/lib/state"
-
-import type {
-  ChatCompletionChunk,
-  ChatCompletionResponse,
-  ChatCompletionsPayload,
-} from "./create-chat-completions"
-
-// ─── Responses API Types (from caozhiyuan/all) ───────────────────────────────
+import { state } from "~/lib/state"
 
 export interface ResponsesPayload {
   model: string
@@ -34,6 +27,7 @@ export interface ResponsesPayload {
   parallel_tool_calls?: boolean | null
   store?: boolean | null
   reasoning?: Reasoning | null
+  context_management?: Array<ResponseContextManagementItem> | null
   include?: Array<ResponseIncludable>
   service_tier?: string | null // NOTE: Unsupported by GitHub Copilot
   [key: string]: unknown
@@ -68,6 +62,14 @@ export interface Reasoning {
   summary?: "auto" | "concise" | "detailed" | null
 }
 
+export interface ResponseContextManagementCompactionItem {
+  type: "compaction"
+  compact_threshold: number
+}
+
+export type ResponseContextManagementItem =
+  ResponseContextManagementCompactionItem
+
 export interface ResponseInputMessage {
   type?: "message"
   role: "user" | "assistant" | "system" | "developer"
@@ -101,11 +103,18 @@ export interface ResponseInputReasoning {
   encrypted_content: string
 }
 
+export interface ResponseInputCompaction {
+  id: string
+  type: "compaction"
+  encrypted_content: string
+}
+
 export type ResponseInputItem =
   | ResponseInputMessage
   | ResponseFunctionToolCallItem
   | ResponseFunctionCallOutputItem
   | ResponseInputReasoning
+  | ResponseInputCompaction
   | Record<string, unknown>
 
 export type ResponseInputContent =
@@ -159,6 +168,7 @@ export type ResponseOutputItem =
   | ResponseOutputMessage
   | ResponseOutputReasoning
   | ResponseOutputFunctionCall
+  | ResponseOutputCompaction
 
 export interface ResponseOutputMessage {
   id: string
@@ -188,6 +198,12 @@ export interface ResponseOutputFunctionCall {
   name: string
   arguments: string
   status?: "in_progress" | "completed" | "incomplete"
+}
+
+export interface ResponseOutputCompaction {
+  id: string
+  type: "compaction"
+  encrypted_content: string
 }
 
 export type ResponseOutputContentBlock =
@@ -338,83 +354,34 @@ export type CreateResponsesReturn = ResponsesResult | ResponsesStream
 interface ResponsesRequestOptions {
   vision: boolean
   initiator: "agent" | "user"
+  subagentMarker?: SubagentMarker | null
+  requestId: string
+  sessionId?: string
 }
-
-// ─── OpenAI to Responses Input Translation ────────────────────────────────────
-
-/**
- * Translates OpenAI Chat Completions messages to Responses API input format.
- * Handles tool_calls and tool result messages.
- */
-const translateOpenAIMessagesToResponsesInput = (
-  messages: Array<ChatCompletionsPayload["messages"][number]>,
-): Array<ResponseInputItem> => {
-  const items: Array<ResponseInputItem> = []
-
-  for (const message of messages) {
-    // Handle tool result messages
-    if (message.role === "tool" && message.tool_call_id) {
-      items.push({
-        type: "function_call_output",
-        call_id: message.tool_call_id,
-        output: typeof message.content === "string" ? message.content : "",
-        status: "completed",
-      })
-      continue
-    }
-
-    // Handle assistant messages with tool calls
-    if (message.role === "assistant" && message.tool_calls?.length) {
-      // First, add any text content as a message
-      if (message.content) {
-        items.push({
-          type: "message",
-          role: "assistant",
-          content: message.content,
-        })
-      }
-
-      // Then add function_call items for each tool call
-      for (const toolCall of message.tool_calls) {
-        items.push({
-          type: "function_call",
-          call_id: toolCall.id,
-          name: toolCall.function.name,
-          arguments: toolCall.function.arguments,
-          status: "completed",
-        })
-      }
-      continue
-    }
-
-    // Handle regular messages (user, assistant without tools, system, developer)
-    items.push({
-      type: "message",
-      role: message.role as "user" | "assistant" | "system" | "developer",
-      content: message.content ?? "",
-    })
-  }
-
-  return items
-}
-
-// ─── createResponses (for single-account mode) ────────────────────────────────
 
 export const createResponses = async (
   payload: ResponsesPayload,
-  { vision, initiator }: ResponsesRequestOptions,
+  {
+    vision,
+    initiator,
+    subagentMarker,
+    requestId,
+    sessionId,
+  }: ResponsesRequestOptions,
 ): Promise<CreateResponsesReturn> => {
-  if (!globalState.copilotToken) throw new Error("Copilot token not found")
+  if (!state.copilotToken) throw new Error("Copilot token not found")
 
   const headers: Record<string, string> = {
-    ...copilotHeaders(globalState, vision),
-    "X-Initiator": initiator,
+    ...copilotHeaders(state, requestId, vision),
+    "x-initiator": initiator,
   }
+
+  prepareInteractionHeaders(sessionId, Boolean(subagentMarker), headers)
 
   // service_tier is not supported by github copilot
   payload.service_tier = null
 
-  const response = await fetch(`${copilotBaseUrl(globalState)}/responses`, {
+  const response = await fetch(`${copilotBaseUrl(state)}/responses`, {
     method: "POST",
     headers,
     body: JSON.stringify(payload),
@@ -430,320 +397,4 @@ export const createResponses = async (
   }
 
   return (await response.json()) as ResponsesResult
-}
-
-// ─── createResponsesAsCompletions (for console multi-account mode) ────────────
-
-/**
- * Handles models whose supported_endpoints is ["/responses"] (e.g. gpt-5.x-codex).
- * Translates Chat Completions ↔ OpenAI Responses API transparently so callers
- * always see standard Chat Completions format.
- *
- * Accepts an optional `st` so it can be used from both single-instance mode
- * (no argument → uses module-level state) and console mode (pass the per-account state).
- */
-export const createResponsesAsCompletions = async (
-  payload: ChatCompletionsPayload,
-  st?: State,
-): Promise<ChatCompletionResponse | AsyncIterable<SSEMessage>> => {
-  const activeState = st ?? globalState
-  if (!activeState.copilotToken) throw new Error("Copilot token not found")
-
-  const responseId = `chatcmpl-${randomUUID().replaceAll("-", "").slice(0, 10)}`
-  const created = Math.floor(Date.now() / 1000)
-
-  // --- translate request ---
-  const requestBody: Record<string, unknown> = {
-    model: payload.model,
-    input: translateOpenAIMessagesToResponsesInput(payload.messages),
-    stream: payload.stream ?? false,
-  }
-  if (payload.max_tokens !== null)
-    requestBody.max_output_tokens = payload.max_tokens
-  if (payload.temperature !== null)
-    requestBody.temperature = payload.temperature
-  if (payload.top_p !== null) requestBody.top_p = payload.top_p
-  if (payload.tools?.length) {
-    // Responses API tool format is flat (no nested "function" wrapper)
-    requestBody.tools = payload.tools.map((t) => ({
-      type: "function",
-      name: t.function.name,
-      description: t.function.description,
-      parameters: t.function.parameters,
-    }))
-  }
-  if (payload.tool_choice !== null)
-    requestBody.tool_choice = payload.tool_choice
-
-  const enableVision = payload.messages.some(
-    (x) =>
-      typeof x.content !== "string"
-      && x.content?.some((x) => x.type === "image_url"),
-  )
-  const isAgentCall = payload.messages.some((msg) =>
-    ["assistant", "tool"].includes(msg.role),
-  )
-
-  const headers: Record<string, string> = {
-    ...copilotHeaders(activeState, enableVision),
-    "X-Initiator": isAgentCall ? "agent" : "user",
-  }
-
-  const response = await fetch(`${copilotBaseUrl(activeState)}/responses`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(requestBody),
-  })
-
-  if (!response.ok) {
-    throw new HTTPError("Failed to create response (Responses API)", response)
-  }
-
-  if (payload.stream) {
-    return translateStream(response, {
-      responseId,
-      created,
-      model: payload.model,
-    })
-  }
-
-  const data = (await response.json()) as ResponsesResult
-  return translateNonStreaming(data, responseId, created)
-}
-
-// ─── streaming translation ────────────────────────────────────────────────────
-
-interface StreamContext {
-  responseId: string
-  created: number
-  model: string
-}
-
-function buildTextDeltaChunk(
-  ctx: StreamContext,
-  delta: string,
-): ChatCompletionChunk {
-  return {
-    id: ctx.responseId,
-    object: "chat.completion.chunk",
-    created: ctx.created,
-    model: ctx.model,
-    choices: [
-      {
-        index: 0,
-        delta: { content: delta },
-        finish_reason: null,
-        logprobs: null,
-      },
-    ],
-  }
-}
-
-function buildToolArgsDeltaChunk(
-  ctx: StreamContext,
-  ev: { delta: string; call_id: string; output_index: number },
-): ChatCompletionChunk {
-  return {
-    id: ctx.responseId,
-    object: "chat.completion.chunk",
-    created: ctx.created,
-    model: ctx.model,
-    choices: [
-      {
-        index: 0,
-        delta: {
-          tool_calls: [
-            {
-              index: ev.output_index,
-              function: { name: "", arguments: ev.delta },
-            },
-          ],
-        },
-        finish_reason: null,
-        logprobs: null,
-      },
-    ],
-  }
-}
-
-function buildToolStartChunk(
-  ctx: StreamContext,
-  item: ResponseOutputFunctionCall,
-  outputIndex: number,
-): ChatCompletionChunk {
-  return {
-    id: ctx.responseId,
-    object: "chat.completion.chunk",
-    created: ctx.created,
-    model: ctx.model,
-    choices: [
-      {
-        index: 0,
-        delta: {
-          tool_calls: [
-            {
-              index: outputIndex,
-              id: `call_${randomUUID().replaceAll("-", "").slice(0, 10)}`,
-              type: "function",
-              function: { name: item.name, arguments: "" },
-            },
-          ],
-        },
-        finish_reason: null,
-        logprobs: null,
-      },
-    ],
-  }
-}
-
-function buildCompletedChunk(
-  ctx: StreamContext,
-  hasToolCalls: boolean,
-  usage?: ResponseUsage,
-): ChatCompletionChunk {
-  return {
-    id: ctx.responseId,
-    object: "chat.completion.chunk",
-    created: ctx.created,
-    model: ctx.model,
-    choices: [
-      {
-        index: 0,
-        delta: {},
-        finish_reason: hasToolCalls ? "tool_calls" : "stop",
-        logprobs: null,
-      },
-    ],
-    ...(usage && {
-      usage: {
-        prompt_tokens: usage.input_tokens,
-        completion_tokens: usage.output_tokens,
-        total_tokens: usage.total_tokens,
-      },
-    }),
-  }
-}
-
-async function* translateStream(
-  response: Response,
-  ctx: StreamContext,
-): AsyncIterable<SSEMessage> {
-  for await (const event of events(response)) {
-    if (!event.data || event.data === "[DONE]") continue
-
-    let data: Record<string, unknown>
-    try {
-      data = JSON.parse(event.data) as Record<string, unknown>
-    } catch {
-      continue
-    }
-
-    const eventType = event.event
-
-    switch (eventType) {
-      case "response.output_text.delta": {
-        const delta = (data as { delta: string }).delta
-        yield { data: JSON.stringify(buildTextDeltaChunk(ctx, delta)) }
-
-        break
-      }
-      case "response.function_call_arguments.delta": {
-        const ev = data as {
-          delta: string
-          call_id: string
-          output_index: number
-        }
-        yield { data: JSON.stringify(buildToolArgsDeltaChunk(ctx, ev)) }
-
-        break
-      }
-      case "response.output_item.added": {
-        const item = (data as { item: ResponseOutputItem }).item
-        if (item.type === "function_call") {
-          const chunk = buildToolStartChunk(
-            ctx,
-            item,
-            data.output_index as number,
-          )
-          yield { data: JSON.stringify(chunk) }
-        }
-
-        break
-      }
-      case "response.completed": {
-        const completed = data as { response: ResponsesResult }
-        const usage = completed.response.usage
-        const hasToolCalls = completed.response.output.some(
-          (item) => item.type === "function_call",
-        )
-        yield {
-          data: JSON.stringify(buildCompletedChunk(ctx, hasToolCalls, usage)),
-        }
-        yield { data: "[DONE]" }
-
-        break
-      }
-      // No default
-    }
-  }
-}
-
-// ─── non-streaming translation ────────────────────────────────────────────────
-
-function translateNonStreaming(
-  data: ResponsesResult,
-  responseId: string,
-  created: number,
-): ChatCompletionResponse {
-  let content = ""
-  const toolCalls: Array<{
-    id: string
-    type: "function"
-    function: { name: string; arguments: string }
-  }> = []
-
-  for (const item of data.output) {
-    if (item.type === "message") {
-      for (const part of item.content ?? []) {
-        if (part.type === "output_text") {
-          content += (part as ResponseOutputText).text
-        }
-      }
-    } else if (item.type === "function_call") {
-      toolCalls.push({
-        id: `call_${randomUUID().replaceAll("-", "").slice(0, 10)}`,
-        type: "function",
-        function: {
-          name: item.name,
-          arguments: item.arguments,
-        },
-      })
-    }
-  }
-
-  return {
-    id: responseId,
-    object: "chat.completion",
-    created,
-    model: data.model,
-    choices: [
-      {
-        index: 0,
-        message: {
-          role: "assistant",
-          content: content || null,
-          ...(toolCalls.length > 0 && { tool_calls: toolCalls }),
-        },
-        logprobs: null,
-        finish_reason: toolCalls.length > 0 ? "tool_calls" : "stop",
-      },
-    ],
-    ...(data.usage && {
-      usage: {
-        prompt_tokens: data.usage.input_tokens,
-        completion_tokens: data.usage.output_tokens,
-        total_tokens: data.usage.total_tokens,
-      },
-    }),
-  }
 }

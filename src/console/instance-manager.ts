@@ -27,7 +27,6 @@ import {
   type ChatCompletionResponse,
   type ChatCompletionsPayload,
 } from "~/services/copilot/create-chat-completions"
-import { createResponsesAsCompletions } from "~/services/copilot/create-responses"
 import { getVSCodeVersion } from "~/services/get-vscode-version"
 
 import type { Account } from "./account-store"
@@ -51,6 +50,7 @@ function createState(account: Account): State {
     manualApprove: account.manualApprove ?? false,
     rateLimitWait: account.rateLimitWait ?? false,
     showToken: false,
+    verbose: false,
   }
 }
 
@@ -135,10 +135,7 @@ export async function startInstance(account: Account): Promise<void> {
         instance.status = "error"
         instance.error = errorMsg
         instances.set(account.id, instance)
-        await updateAccount(account.id, {
-          status: "error",
-          error: errorMsg,
-        }).catch(() => {})
+        await updateAccount(account.id, { status: "error" }).catch(() => {})
         throw new Error(errorMsg)
       }
       consola.info(`[${account.name}] Copilot plan: ${userInfo.copilot_plan}`)
@@ -284,33 +281,8 @@ export async function completionsHandler(
       payload.max_tokens = selectedModel.capabilities.limits.max_output_tokens
     }
 
-    // Route to Responses API for models that only support /responses (e.g. gpt-5.x-codex)
-    const needsResponsesApi =
-      selectedModel?.supported_endpoints
-      && !selectedModel.supported_endpoints.includes("/chat/completions")
-      && selectedModel.supported_endpoints.includes("/responses")
-
-    if (needsResponsesApi) {
-      consola.debug("Routing to Responses API for model:", payload.model)
-      const result = await createResponsesAsCompletions(
-        payload as unknown as ChatCompletionsPayload,
-        st,
-      )
-      if (Object.hasOwn(result, "choices")) {
-        return c.json(result as ChatCompletionResponse)
-      }
-      return streamSSE(c, async (stream) => {
-        for await (const chunk of result as AsyncIterable<{
-          data: string
-          event?: string
-        }>) {
-          await stream.writeSSE(chunk)
-        }
-      })
-    }
-
     const headers: Record<string, string> = {
-      ...copilotHeaders(st, hasVisionContent(payload.messages)),
+      ...copilotHeaders(st, undefined, hasVisionContent(payload.messages)),
       "X-Initiator": isAgentRequest(payload.messages) ? "agent" : "user",
     }
 
@@ -414,7 +386,7 @@ export async function messagesHandler(
     )
 
     const headers: Record<string, string> = {
-      ...copilotHeaders(st, enableVision),
+      ...copilotHeaders(st, undefined, enableVision),
       "X-Initiator": isAgentCall ? "agent" : "user",
     }
 
@@ -438,6 +410,7 @@ export async function messagesHandler(
           messageStartSent: false,
           contentBlockIndex: 0,
           contentBlockOpen: false,
+          thinkingBlockOpen: false,
           toolCalls: {} as Record<
             number,
             { id: string; name: string; anthropicBlockIndex: number }

@@ -1,7 +1,7 @@
 {
   "name": "copilot-api",
-  "version": "0.15.5",
-  "description": "A reverse-engineered proxy for GitHub Copilot API that exposes it as an OpenAI and Anthropic compatible service",
+  "version": "1.3.5",
+  "description": "A reverse-engineered proxy for GitHub Copilot API that exposes it as an OpenAI and Anthropic compatible service. Usable with Claude Code Or Codex Or Opencode!",
   "keywords": [
     "proxy",
     "github-copilot",
@@ -18,7 +18,8 @@
     "copilot-api": "./dist/main.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "pages"
   ],
   "scripts": {
     "build": "tsdown",

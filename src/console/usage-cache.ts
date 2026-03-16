@@ -14,7 +14,7 @@ interface UsageCache {
 async function readCache(): Promise<UsageCache> {
   try {
     const data = await fs.readFile(PATHS.USAGE_CACHE_PATH)
-    return JSON.parse(data) as UsageCache
+    return JSON.parse(data.toString()) as UsageCache
   } catch {
     return {}
   }

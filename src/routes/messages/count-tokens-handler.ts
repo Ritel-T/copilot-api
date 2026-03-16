@@ -2,9 +2,9 @@ import type { Context } from "hono"
 
 import consola from "consola"
 
-import { state } from "~/lib/state"
 import { getTokenCount } from "~/lib/tokenizer"
 
+import { findEndpointModel } from "../../lib/models"
 import { type AnthropicMessagesPayload } from "./anthropic-types"
 import { translateToOpenAI } from "./non-stream-translation"
 
@@ -19,9 +19,8 @@ export async function handleCountTokens(c: Context) {
 
     const openAIPayload = translateToOpenAI(anthropicPayload)
 
-    const selectedModel = state.models?.data.find(
-      (model) => model.id === anthropicPayload.model,
-    )
+    const selectedModel = findEndpointModel(anthropicPayload.model)
+    anthropicPayload.model = selectedModel?.id ?? anthropicPayload.model
 
     if (!selectedModel) {
       consola.warn("Model not found, returning default token count")
@@ -33,18 +32,21 @@ export async function handleCountTokens(c: Context) {
     const tokenCount = await getTokenCount(openAIPayload, selectedModel)
 
     if (anthropicPayload.tools && anthropicPayload.tools.length > 0) {
-      let mcpToolExist = false
-      if (anthropicBeta?.startsWith("claude-code")) {
-        mcpToolExist = anthropicPayload.tools.some((tool) =>
-          tool.name.startsWith("mcp__"),
+      let addToolSystemPromptCount = false
+      if (anthropicBeta) {
+        const toolsLength = anthropicPayload.tools.length
+        addToolSystemPromptCount = !anthropicPayload.tools.some(
+          (tool) =>
+            tool.name.startsWith("mcp__")
+            || (tool.name === "Skill" && toolsLength === 1),
         )
       }
-      if (!mcpToolExist) {
+      if (addToolSystemPromptCount) {
         if (anthropicPayload.model.startsWith("claude")) {
           // https://docs.anthropic.com/en/docs/agents-and-tools/tool-use/overview#pricing
           tokenCount.input = tokenCount.input + 346
         } else if (anthropicPayload.model.startsWith("grok")) {
-          tokenCount.input = tokenCount.input + 480
+          tokenCount.input = tokenCount.input + 120
         }
       }
     }
@@ -52,8 +54,6 @@ export async function handleCountTokens(c: Context) {
     let finalTokenCount = tokenCount.input + tokenCount.output
     if (anthropicPayload.model.startsWith("claude")) {
       finalTokenCount = Math.round(finalTokenCount * 1.15)
-    } else if (anthropicPayload.model.startsWith("grok")) {
-      finalTokenCount = Math.round(finalTokenCount * 1.03)
     }
 
     consola.info("Token count:", finalTokenCount)

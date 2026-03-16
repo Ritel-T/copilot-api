@@ -20,7 +20,7 @@ const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
 async function readStore(): Promise<AdminStore> {
   try {
     const data = await fs.readFile(STORE_PATH)
-    return JSON.parse(data) as AdminStore
+    return JSON.parse(data.toString()) as AdminStore
   } catch {
     return { credentials: null, sessions: [] }
   }

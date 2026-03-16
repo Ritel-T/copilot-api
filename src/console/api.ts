@@ -42,9 +42,8 @@ export function setProxyPort(port: number): void {
 }
 
 function formatZodError(err: z.ZodError): string {
-  return z.treeifyError(err).children ?
-      JSON.stringify(z.treeifyError(err))
-    : err.message
+  const treeified = z.treeifyError(err)
+  return treeified.errors.length > 0 ? treeified.errors.join("; ") : err.message
 }
 
 export const consoleApi = new Hono()

@@ -1,6 +1,8 @@
 import consola from "consola"
 import fs from "node:fs/promises"
+import { setTimeout as delay } from "node:timers/promises"
 
+import { isOpencodeOauthApp } from "~/lib/api-config"
 import { PATHS } from "~/lib/paths"
 import { getCopilotToken } from "~/services/github/get-copilot-token"
 import { getCopilotUserInfo } from "~/services/github/get-copilot-user-info"
@@ -11,27 +13,54 @@ import { pollAccessToken } from "~/services/github/poll-access-token"
 import { HTTPError } from "./error"
 import { state } from "./state"
 
-const readGithubToken = () => fs.readFile(PATHS.GITHUB_TOKEN_PATH, "utf8")
+let copilotRefreshLoopController: AbortController | null = null
 
-let isRefreshing = false
+export const stopCopilotRefreshLoop = () => {
+  if (!copilotRefreshLoopController) {
+    return
+  }
+
+  copilotRefreshLoopController.abort()
+  copilotRefreshLoopController = null
+}
+
+const readGithubToken = () => fs.readFile(PATHS.GITHUB_TOKEN_PATH, "utf8")
 
 const writeGithubToken = (token: string) =>
   fs.writeFile(PATHS.GITHUB_TOKEN_PATH, token)
 
 export const setupCopilotToken = async () => {
-  try {
-    const userInfo = await getCopilotUserInfo()
-    if (userInfo.copilot_plan === "free") {
-      consola.error("⚠️  GitHub Copilot Free does not support API access")
-      consola.error(
-        "Please upgrade to Copilot Pro or Business to use this project",
-      )
-      consola.error("Visit: https://github.com/features/copilot")
-      process.exit(1)
+  // Check Copilot plan for non-opencode OAuth
+  if (!isOpencodeOauthApp()) {
+    try {
+      const userInfo = await getCopilotUserInfo()
+      if (userInfo.copilot_plan === "free") {
+        consola.error("⚠️  GitHub Copilot Free does not support API access")
+        consola.error(
+          "Please upgrade to Copilot Pro or Business to use this project",
+        )
+        consola.error("Visit: https://github.com/features/copilot")
+        process.exit(1)
+      }
+      consola.info(`Copilot plan: ${userInfo.copilot_plan}`)
+    } catch (error) {
+      consola.debug("Failed to get Copilot user info, continuing:", error)
     }
-    consola.info(`Copilot plan: ${userInfo.copilot_plan}`)
-  } catch (error) {
-    consola.debug("Failed to get Copilot user info, continuing:", error)
+  }
+
+  // Handle opencode OAuth
+  if (isOpencodeOauthApp()) {
+    if (!state.githubToken) throw new Error(`opencode token not found`)
+
+    state.copilotToken = state.githubToken
+
+    consola.debug("GitHub Copilot token set from opencode auth token")
+    if (state.showToken) {
+      consola.info("Copilot token:", state.copilotToken)
+    }
+
+    stopCopilotRefreshLoop()
+    return
   }
 
   const { token, refresh_in } = await getCopilotToken()
@@ -43,29 +72,48 @@ export const setupCopilotToken = async () => {
     consola.info("Copilot token:", token)
   }
 
-  const refreshInterval = (refresh_in - 60) * 1000
-  setInterval(async () => {
-    if (isRefreshing) {
-      consola.debug("Token refresh already in progress, skipping")
-      return
-    }
+  stopCopilotRefreshLoop()
 
-    isRefreshing = true
+  const controller = new AbortController()
+  copilotRefreshLoopController = controller
+
+  runCopilotRefreshLoop(refresh_in, controller.signal)
+    .catch(() => {
+      consola.warn("Copilot token refresh loop stopped")
+    })
+    .finally(() => {
+      if (copilotRefreshLoopController === controller) {
+        copilotRefreshLoopController = null
+      }
+    })
+}
+
+const runCopilotRefreshLoop = async (
+  refreshIn: number,
+  signal: AbortSignal,
+) => {
+  let nextRefreshDelayMs = (refreshIn - 60) * 1000
+
+  while (!signal.aborted) {
+    await delay(nextRefreshDelayMs, undefined, { signal })
+
+    consola.debug("Refreshing Copilot token")
+
     try {
-      consola.debug("Refreshing Copilot token")
-      const { token } = await getCopilotToken()
+      const { token, refresh_in } = await getCopilotToken()
       state.copilotToken = token
       consola.debug("Copilot token refreshed")
       if (state.showToken) {
         consola.info("Refreshed Copilot token:", token)
       }
+
+      nextRefreshDelayMs = (refresh_in - 60) * 1000
     } catch (error) {
       consola.error("Failed to refresh Copilot token:", error)
-    } finally {
-      // eslint-disable-next-line require-atomic-updates
-      isRefreshing = false
+      nextRefreshDelayMs = 15_000
+      consola.warn(`Retrying Copilot token refresh in ${nextRefreshDelayMs}ms`)
     }
-  }, refreshInterval)
+  }
 }
 
 interface SetupGitHubTokenOptions {
